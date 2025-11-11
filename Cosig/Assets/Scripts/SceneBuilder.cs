@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Models;
 using Services;
+
 // Unity component responsible for constructing and rendering the scene based on loaded data
 public class SceneBuilder : MonoBehaviour
 {
@@ -11,8 +12,11 @@ public class SceneBuilder : MonoBehaviour
     private List<ObjectData> sceneObjects = new List<ObjectData>(); // List of scene objects
     void Start()
     {
-        string filePath = "path/to/your/file.txt"; // Path to the configuration file
+        // Durante debugging usa o caminho absoluto ou um TextAsset em Resources.
+        // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
+        string filePath = "Assets/Scripts/Resources/Config/Test Scene 1.txt";
         sceneObjects = sceneService.LoadSceneObjects(filePath); // Load objects from configuration
+        foreach (var obj in sceneObjects) obj.DebugSummary();
         BuildScene(); // Build and display the scene
     }
     // Method to create each object in the scene based on loaded data
@@ -22,13 +26,22 @@ public class SceneBuilder : MonoBehaviour
         {
             // Create a primitive object (using a cube as an example here)
             GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            ApplyTransformations(obj, objData.transformations); // Apply transformations to object
-            ApplyMaterial(obj, objData.material); // Apply material properties to object
+
+            // Aplica cada transformação (se houverem)
+            ApplyTransformations(obj, objData.transformations);
+
+            // Seleciona um MaterialProperties válido (usa o primeiro material lido, se existir)
+            MaterialProperties matProps = (objData.materials != null && objData.materials.Count > 0)
+                ? objData.materials[0]
+                : new MaterialProperties();
+
+            ApplyMaterial(obj, matProps); // Apply material properties to object
         }
     }
-        // Apply transformations to a given object based on the list of transformations
+    // Apply transformations to a given object based on the list of transformations
     void ApplyTransformations(GameObject obj, List<Transformation> transformations)
     {
+        if (transformations == null) return;
         foreach (var trans in transformations)
         {
             obj.transform.Translate(trans.translation, Space.World); // Apply position
@@ -39,10 +52,12 @@ public class SceneBuilder : MonoBehaviour
     // Apply material properties to the given object
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
+        if (baseMaterial == null || properties == null) return;
         Material newMaterial = new Material(baseMaterial); // Create new material from base
         newMaterial.color = properties.color; // Set color
         newMaterial.SetFloat("_Shininess", properties.shininess); // Set shininess
         newMaterial.SetFloat("_Metallic", properties.metallic); // Set metallic
-        obj.GetComponent<Renderer>().material = newMaterial; // Assign material to object
+        var renderer = obj.GetComponent<Renderer>();
+        if (renderer != null) renderer.material = newMaterial; // Assign material to object
     }
 }
