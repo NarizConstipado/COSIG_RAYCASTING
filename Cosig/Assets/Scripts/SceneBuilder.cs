@@ -9,13 +9,16 @@ public class SceneBuilder : MonoBehaviour
 {
     public Material baseMaterial; // Base material used as a template for object materials
     private SceneService sceneService = new SceneService(); // Service instance to load scene data
+
     private List<ObjectData> sceneObjects = new List<ObjectData>(); // List of scene objects
+    private List<Transformation> transformations = new List<Transformation>();
+    private List<MaterialProperties> materials = new List<MaterialProperties>();
     void Start()
     {
         // Durante debugging usa o caminho absoluto ou um TextAsset em Resources.
         // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
-        string filePath = "Assets/Scripts/Resources/Config/Test Scene 1.txt";
-        sceneObjects = sceneService.LoadSceneObjects(filePath); // Load objects from configuration
+        string filePath = "Config/Test Scene 1";
+        sceneService.LoadScene(filePath, out sceneObjects, out transformations, out materials); // Load objects from configuration
         foreach (var obj in sceneObjects) obj.DebugSummary();
         BuildScene(); // Build and display the scene
     }
@@ -24,39 +27,81 @@ public class SceneBuilder : MonoBehaviour
     {
         foreach (var objData in sceneObjects)
         {
-            // Create a primitive object (using a cube as an example here)
-            GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            if (objData is SphereData) GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-            // Aplica cada transformaÁ„o (se houverem)
-            ApplyTransformations(obj, objData.transformations);
+            if (objData is BoxData) GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-            // Seleciona um MaterialProperties v·lido (usa o primeiro material lido, se existir)
-            MaterialProperties matProps = (objData.materials != null && objData.materials.Count > 0)
-                ? objData.materials[0]
-                : new MaterialProperties();
+            if (objData is TrianglePrimitive triData)
+            {
+                //criar tri√¢ngulo
+            }
 
-            ApplyMaterial(obj, matProps); // Apply material properties to object
+            if (objData is CameraData camData)
+            {
+                var camObj = new GameObject("Camera");
+                var camera = camObj.AddComponent<Camera>();
+                camera.fieldOfView = camData.fov;
+                camObj.AddComponent<Camera>();
+                camObj.transform.position = new Vector3(0, 0, camData.distance);
+                GameObject obj = camObj;
+            }
+
+            if (objData is LightData lightData)
+            {
+                var lightObj = new GameObject("Light");
+                var light = lightObj.AddComponent<Light>();
+                light.color = lightData.color;
+                GameObject obj = lightObj;
+            }
+
+            // Aplica cada transformaÔøΩÔøΩo (se houverem)
+            int tIndex = objData switch
+            {
+                SphereData s => s.transformationIndex,
+                BoxData b => b.transformationIndex,
+                TrianglePrimitive t => t.transformationIndex,
+                CameraData c => c.transformationIndex,
+                LightData l => l.transformationIndex,
+                _ => -1
+            };
+
+            if (tIndex >= 0 && tIndex < transformations.Count)
+            {
+                ;
+                ApplyTransformation(obj, transformations[tIndex]);
+            }
+            
+            int mIndex = objData switch
+            {
+                SphereData s => s.materialIndex,
+                BoxData b => b.materialIndex,
+                TrianglePrimitive t => t.materialIndex,
+                _ => -1
+            };
+
+            if (mIndex >= 0 && mIndex < materials.Count)
+            {;
+                ApplyMaterial(obj, materials[mIndex]);
+            }
         }
     }
     // Apply transformations to a given object based on the list of transformations
-    void ApplyTransformations(GameObject obj, List<Transformation> transformations)
+    void ApplyTransformation(GameObject obj, Transformation transformation)
     {
-        if (transformations == null) return;
-        foreach (var trans in transformations)
-        {
-            obj.transform.Translate(trans.translation, Space.World); // Apply position
-            obj.transform.Rotate(trans.rotation); // Apply rotation
-            obj.transform.localScale = trans.scale; // Apply scale
-        }
+        if (transformation == null) return;
+        obj.transform.Translate(trans.translation, Space.World); // Apply position
+        obj.transform.Rotate(trans.rotation); // Apply rotation
+        obj.transform.localScale = trans.scale; // Apply scale
     }
     // Apply material properties to the given object
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
         if (baseMaterial == null || properties == null) return;
+
         Material newMaterial = new Material(baseMaterial); // Create new material from base
         newMaterial.color = properties.color; // Set color
-        newMaterial.SetFloat("_Shininess", properties.shininess); // Set shininess
-        newMaterial.SetFloat("_Metallic", properties.metallic); // Set metallic
+        //newMaterial.SetFloat("_Shininess", properties.shininess); // Set shininess
+        //newMaterial.SetFloat("_Metallic", properties.metallic); // Set metallic
         var renderer = obj.GetComponent<Renderer>();
         if (renderer != null) renderer.material = newMaterial; // Assign material to object
     }

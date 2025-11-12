@@ -2,9 +2,9 @@
 using UnityEngine;
 // Class to represent transformations for an object, including position, rotation, and scale
 [System.Serializable]
-public class Transformation
-{
-    public Vector3 translation = Vector3.zero; // Position offset for the object
-    public Vector3 rotation = Vector3.zero; // Rotation values for the object
-    public Vector3 scale = Vector3.one; // Scale multiplier for the object
-}
+    public class Transformation(double posX, double posY, double posZ, double rotX, double rotY, double rotZ, double scaleX, double scaleY, double scaleZ)
+    {
+        public Vector3 translation = new Vector3(posX, posY, posZ);
+        public Vector3 rotation = new Vector3(rotX, rotY, rotZ);
+        public Vector3 scale = new Vector3(scaleX, scaleY, scaleZ);
+    }
