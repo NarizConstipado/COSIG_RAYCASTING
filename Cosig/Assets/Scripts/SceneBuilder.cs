@@ -27,9 +27,10 @@ public class SceneBuilder : MonoBehaviour
     {
         foreach (var objData in sceneObjects)
         {
-            if (objData is SphereData) GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            GameObject obj = null;
+            if (objData is SphereData) obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-            if (objData is BoxData) GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            if (objData is BoxData) obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
             if (objData is TrianglePrimitive triData)
             {
@@ -43,7 +44,7 @@ public class SceneBuilder : MonoBehaviour
                 camera.fieldOfView = camData.fov;
                 camObj.AddComponent<Camera>();
                 camObj.transform.position = new Vector3(0, 0, camData.distance);
-                GameObject obj = camObj;
+                obj = camObj;
             }
 
             if (objData is LightData lightData)
@@ -51,7 +52,7 @@ public class SceneBuilder : MonoBehaviour
                 var lightObj = new GameObject("Light");
                 var light = lightObj.AddComponent<Light>();
                 light.color = lightData.color;
-                GameObject obj = lightObj;
+                obj = lightObj;
             }
 
             // Aplica cada transforma��o (se houverem)
@@ -67,7 +68,6 @@ public class SceneBuilder : MonoBehaviour
 
             if (tIndex >= 0 && tIndex < transformations.Count)
             {
-                ;
                 ApplyTransformation(obj, transformations[tIndex]);
             }
             

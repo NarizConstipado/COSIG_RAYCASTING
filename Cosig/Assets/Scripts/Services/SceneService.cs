@@ -11,7 +11,7 @@ namespace Services
     public class SceneService
     {
         // Method to load scene objects from a given configuration file path
-        public List<ObjectData> LoadScene(string filePathout, out List<ObjectData> sceneObjects, out List<Transformation> transformations,out List<MaterialProperties> materials)
+        public List<ObjectData> LoadScene(string filePath, out List<ObjectData> sceneObjects, out List<Transformation> transformations, out List<MaterialProperties> materials)
         {
             sceneObjects = new List<ObjectData>();
             transformations = new List<Transformation>();

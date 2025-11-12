@@ -5,10 +5,16 @@ using UnityEngine;
 namespace Models
 {
     [System.Serializable]
-    public class ImageSettings(int resX, int resY, double colorR, double colorG, double colorB)
+    public class ImageSettings : ObjectData
     {
-        public Vector2Int size = new Vector2Int(resX, resY);
-        public Color backgroundColor = new Color(colorR, colorG, colorB);
+        public Vector2Int size;
+        public Color backgroundColor;
+
+        public ImageSettings(int resX, int resY, float colorR, float colorG, float colorB)
+        {
+            size = new Vector2Int(resX, resY);
+            backgroundColor = new Color(colorR, colorG, colorB);
+        }
     }
 
     [System.Serializable]
@@ -33,7 +39,7 @@ namespace Models
         public int transformationIndex;
         public Color color;
 
-        public LightData(int tIndex, double r, double g, double b)
+        public LightData(int tIndex, float r, float g, float b)
         {
             transformationIndex = tIndex;
             color = new Color((float)r, (float)g, (float)b);
@@ -47,7 +53,7 @@ namespace Models
         public int materialIndex;
         public Vector3 v1, v2, v3;
 
-        public TrianglePrimitive(int tIndex, int mIndex, double v1x, double v1y, double v1z,double v2x, double v2y, double v2z,double v3x, double v3y, double v3z)
+        public TrianglePrimitive(int tIndex, int mIndex, float v1x, float v1y, float v1z,float v2x, float v2y, float v2z,float v3x, float v3y, float v3z)
         {
             transformationIndex = tIndex;
             materialIndex = mIndex;
