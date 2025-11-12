@@ -19,7 +19,6 @@ public class SceneBuilder : MonoBehaviour
         // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
         string filePath = "Config/Test Scene 1";
         sceneService.LoadScene(filePath, out sceneObjects, out transformations, out materials); // Load objects from configuration
-        foreach (var obj in sceneObjects) obj.DebugSummary();
         BuildScene(); // Build and display the scene
     }
     // Method to create each object in the scene based on loaded data
@@ -89,9 +88,9 @@ public class SceneBuilder : MonoBehaviour
     void ApplyTransformation(GameObject obj, Transformation transformation)
     {
         if (transformation == null) return;
-        obj.transform.Translate(trans.translation, Space.World); // Apply position
-        obj.transform.Rotate(trans.rotation); // Apply rotation
-        obj.transform.localScale = trans.scale; // Apply scale
+        obj.transform.Translate(transformation.translation, Space.World); // Apply position
+        obj.transform.Rotate(transformation.rotation); // Apply rotation
+        obj.transform.localScale = transformation.scale; // Apply scale
     }
     // Apply material properties to the given object
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
