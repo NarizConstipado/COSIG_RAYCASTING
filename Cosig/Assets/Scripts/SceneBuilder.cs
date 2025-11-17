@@ -17,8 +17,15 @@ public class SceneBuilder : MonoBehaviour
     {
         // Durante debugging usa o caminho absoluto ou um TextAsset em Resources.
         // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
-        string filePath = "Config/Test Scene 1";
-        sceneService.LoadScene(filePath, out sceneObjects, out transformations, out materials); // Load objects from configuration
+        TextAsset textFile = Resources.Load<TextAsset>("Config/Test Scene 1");
+
+        if (textFile == null)
+        {
+            Debug.LogError("Could not load Test Scene 1.txt from Resources/Config/");
+            return;
+        }
+
+        sceneService.LoadScene(textFile.text, out sceneObjects, out transformations, out materials); // Load objects from configuration
         BuildScene(); // Build and display the scene
     }
     // Method to create each object in the scene based on loaded data
@@ -33,7 +40,37 @@ public class SceneBuilder : MonoBehaviour
 
             if (objData is TrianglePrimitive triData)
             {
-                //criar triângulo
+                obj = new GameObject("Triangle");
+                MeshFilter mf = obj.AddComponent<MeshFilter>();
+                MeshRenderer mr = obj.AddComponent<MeshRenderer>();
+
+                Mesh mesh = new Mesh();
+                mf.mesh = mesh;
+
+                Vector3[] vertices = new Vector3[]
+                {
+                    triData.v1,
+                    triData.v2,
+                    triData.v3
+                };
+
+                Vector2[] uvs = new Vector2[]
+                {
+                        new Vector2(0, 0),
+                        new Vector2(0, 1),
+                        new Vector2(1, 1)
+                };
+
+                int[] triangles = new int[] { 0, 1, 2 };
+                Vector3 normal = Vector3.Cross(triData.v2 - triData.v1, triData.v3 - triData.v1).normalized;
+                Vector3[] normals = new Vector3[] { normal, normal, normal };
+                mesh.Clear();
+                mesh.vertices = vertices;
+                mesh.uv = uvs;
+                mesh.triangles = triangles;
+                mesh.normals = normals;
+
+                mesh.RecalculateBounds();
             }
 
             if (objData is CameraData camData)
@@ -41,7 +78,6 @@ public class SceneBuilder : MonoBehaviour
                 var camObj = new GameObject("Camera");
                 var camera = camObj.AddComponent<Camera>();
                 camera.fieldOfView = camData.fov;
-                camObj.AddComponent<Camera>();
                 camObj.transform.position = new Vector3(0, 0, camData.distance);
                 obj = camObj;
             }
