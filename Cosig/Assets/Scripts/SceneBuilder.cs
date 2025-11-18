@@ -7,7 +7,6 @@ using Services;
 // Unity component responsible for constructing and rendering the scene based on loaded data
 public class SceneBuilder : MonoBehaviour
 {
-    public Material baseMaterial; // Base material used as a template for object materials
     private SceneService sceneService = new SceneService(); // Service instance to load scene data
 
     private List<ObjectData> sceneObjects = new List<ObjectData>(); // List of scene objects
@@ -31,6 +30,10 @@ public class SceneBuilder : MonoBehaviour
     // Method to create each object in the scene based on loaded data
     void BuildScene()
     {
+        // Test Code
+        ImageSettings img = null;
+        CameraData cam = null;
+
         foreach (var objData in sceneObjects)
         {
             GameObject obj = null;
@@ -63,6 +66,7 @@ public class SceneBuilder : MonoBehaviour
 
                 int[] triangles = new int[] { 0, 1, 2 };
                 Vector3 normal = Vector3.Cross(triData.v2 - triData.v1, triData.v3 - triData.v1).normalized;
+                Debug.Log("Triangle normal: " + normal);
                 Vector3[] normals = new Vector3[] { normal, normal, normal };
                 mesh.Clear();
                 mesh.vertices = vertices;
@@ -80,6 +84,8 @@ public class SceneBuilder : MonoBehaviour
                 camera.fieldOfView = camData.fov;
                 camObj.transform.position = new Vector3(0, 0, camData.distance);
                 obj = camObj;
+                // Test Code
+                cam = camData;
             }
 
             if (objData is LightData lightData)
@@ -89,6 +95,8 @@ public class SceneBuilder : MonoBehaviour
                 light.color = lightData.color;
                 obj = lightObj;
             }
+
+            if (objData is ImageSettings imgData) img = imgData;
 
             // Aplica cada transforma��o (se houverem)
             int tIndex = objData switch
@@ -113,14 +121,17 @@ public class SceneBuilder : MonoBehaviour
                 TrianglePrimitive t => t.materialIndex,
                 _ => -1
             };
-
             if (mIndex >= 0 && mIndex < materials.Count)
-            {;
+            {
                 ApplyMaterial(obj, materials[mIndex]);
             }
         }
+
+        PrimaryRays tracer = new PrimaryRays(img, cam);
+
+        Texture2D tex = tracer.Render();
     }
-    // Apply transformations to a given object based on the list of transformations
+
     void ApplyTransformation(GameObject obj, Transformation transformation)
     {
         if (transformation == null) return;
@@ -128,16 +139,22 @@ public class SceneBuilder : MonoBehaviour
         obj.transform.Rotate(transformation.rotation); // Apply rotation
         obj.transform.localScale = transformation.scale; // Apply scale
     }
-    // Apply material properties to the given object
+    
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
-        if (baseMaterial == null || properties == null) return;
-
-        Material newMaterial = new Material(baseMaterial); // Create new material from base
+        Material newMaterial = new Material(Shader.Find("Standard"));
         newMaterial.color = properties.color; // Set color
-        //newMaterial.SetFloat("_Shininess", properties.shininess); // Set shininess
-        //newMaterial.SetFloat("_Metallic", properties.metallic); // Set metallic
+
+        //newMaterial.SetFloat("_Metallic", (float)properties.specular);
+        //newMaterial.SetFloat("_Glossiness", (float)properties.diffuse);
+
+        newMaterial.SetFloat("_Ambient", properties.ambient);
+        newMaterial.SetFloat("_Diffuse", properties.diffuse);
+        newMaterial.SetFloat("_Specular", properties.specular);
+        newMaterial.SetFloat("_Refract", properties.refraction);
+        newMaterial.SetFloat("_RefractIndex", properties.refractionIndex);
+
         var renderer = obj.GetComponent<Renderer>();
-        if (renderer != null) renderer.material = newMaterial; // Assign material to object
+        if (renderer != null) renderer.material = newMaterial;
     }
 }

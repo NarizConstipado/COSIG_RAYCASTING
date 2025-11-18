@@ -98,24 +98,25 @@ namespace Services
                     currentLine++; // skip header
                     currentLine++; // skip '{'
 
-                    // first line = color (3 floats)
+                    // first line
                     string[] col = lines[currentLine].Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
                     float r = float.Parse(col[0], CultureInfo.InvariantCulture);
                     float g = float.Parse(col[1], CultureInfo.InvariantCulture);
                     float b = float.Parse(col[2], CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    // second line = ambient, diffuse, specular (3 floats)
+                    // second line
                     string[] props = lines[currentLine].Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
                     float amb = float.Parse(props[0], CultureInfo.InvariantCulture);
                     float dif = float.Parse(props[1], CultureInfo.InvariantCulture);
                     float spec = float.Parse(props[2], CultureInfo.InvariantCulture);
+                    float refr = float.Parse(props[3], CultureInfo.InvariantCulture);
+                    float refrI = float.Parse(props[4], CultureInfo.InvariantCulture);
                     currentLine++;
 
                     currentLine++; // skip '}'
 
-                    // your MaterialProperties constructor expects 8 values
-                    materials.Add(new MaterialProperties(r, g, b, amb, dif, spec, 0, 1));
+                    materials.Add(new MaterialProperties(r, g, b, amb, dif, spec, refr, refrI));
                     continue;
                 }
 

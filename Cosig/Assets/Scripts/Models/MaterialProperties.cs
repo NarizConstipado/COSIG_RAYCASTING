@@ -6,13 +6,13 @@ using UnityEngine;
 public class MaterialProperties
 {
     public Color color;
-    public double ambient;
-    public double diffuse;
-    public double specular;
-    public double refraction;
-    public double refractionIndex;
+    public float ambient;
+    public float diffuse;
+    public float specular;
+    public float refraction;
+    public float refractionIndex;
 
-    public MaterialProperties(float colorR, float colorG, float colorB, double amb, double dif, double spec, double refr, double refrI)
+    public MaterialProperties(float colorR, float colorG, float colorB, float amb, float dif, float spec, float refr, float refrI)
     {
         color = new Color(colorR, colorG, colorB);
         ambient = amb;
