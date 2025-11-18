@@ -61,17 +61,6 @@ namespace Models
             v2 = new Vector3(v2x, v2y, v2z);
             v3 = new Vector3(v3x, v3y, v3z);
         }
-
-        /*
-        public Vector3 ComputeNormal()
-        {
-            Vector3 edgeAB = v1 - v0;
-            Vector3 edgeAC = v2 - v0;
-            Vector3 n = Vector3.Cross(edgeAB, edgeAC);
-            if (n.sqrMagnitude <= Mathf.Epsilon) return Vector3.up;
-            return n.normalized;
-        }
-        */
     }
 
     [System.Serializable]

@@ -1,4 +1,3 @@
-// Services/SceneService.cs
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -8,10 +7,9 @@ using System;
 
 namespace Services
 {
-    // Service responsible for loading and interpreting data from a scene configuration file
     public class SceneService
     {
-        // Method to load scene objects from a given configuration file path
+        //Método para carregar os objetos da cena a partir do caminho do ficheiro dado
         public void LoadScene(string textContent, out List<ObjectData> sceneObjects, out List<Transformation> transformations, out List<MaterialProperties> materials)
         {
             textContent = textContent.Replace("\r", "");
@@ -27,18 +25,18 @@ namespace Services
             {
                 string line = lines[currentLine].Trim();
 
-                // Skip empty lines
+                // Saltar linhas vazias
                 if (string.IsNullOrWhiteSpace(line))
                 {
                     currentLine++;
                     continue;
                 }
 
-                // --- IMAGE ---
+                // Imagem
                 if (line.StartsWith("Image"))
                 {
-                    currentLine++; // skip 'Image'
-                    currentLine++; // skip '{'
+                    currentLine++; // saltar 'Image'
+                    currentLine++; // saltar '{'
 
                     string[] size = lines[currentLine].Trim().Split(' ');
                     int w = int.Parse(size[0]);
@@ -51,16 +49,16 @@ namespace Services
                     float b = float.Parse(col[2], CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
 
                     sceneObjects.Add(new ImageSettings(w, h, r, g, b));
                     continue;
                 }
 
-                // --- TRANSFORMATION ---
+                // Transformação
                 if (line.StartsWith("Transformation"))
                 {
-                    currentLine++; // skip header
+                    currentLine++; // saltar 'Transformation'
                     currentLine++; // skip '{'
 
                     Transformation t = new Transformation(0,0,0,0,0,0,0,0,0);
@@ -87,25 +85,25 @@ namespace Services
                         currentLine++;
                     }
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
                     transformations.Add(t);
                     continue;
                 }
 
-                // --- MATERIAL ---
+                // Material
                 if (line.StartsWith("Material"))
                 {
-                    currentLine++; // skip header
-                    currentLine++; // skip '{'
+                    currentLine++; // saltar "Material"
+                    currentLine++; // saltar '{'
 
-                    // first line
+                    // primeira linha
                     string[] col = lines[currentLine].Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
                     float r = float.Parse(col[0], CultureInfo.InvariantCulture);
                     float g = float.Parse(col[1], CultureInfo.InvariantCulture);
                     float b = float.Parse(col[2], CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    // second line
+                    // segunda linha
                     string[] props = lines[currentLine].Trim().Split(' ', System.StringSplitOptions.RemoveEmptyEntries);
                     float amb = float.Parse(props[0], CultureInfo.InvariantCulture);
                     float dif = float.Parse(props[1], CultureInfo.InvariantCulture);
@@ -114,19 +112,19 @@ namespace Services
                     float refrI = float.Parse(props[4], CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
 
                     materials.Add(new MaterialProperties(r, g, b, amb, dif, spec, refr, refrI));
                     continue;
                 }
 
-                // --- SPHERE / BOX ---
+                // Esfera / Cubo
                 if (line.StartsWith("Sphere") || line.StartsWith("Box"))
                 {
                     bool isSphere = line.StartsWith("Sphere");
 
-                    currentLine++; // skip header
-                    currentLine++; // skip '{'
+                    currentLine++; // saltar 'Sphere'/'Box'
+                    currentLine++; // saltar '{'
 
                     int tIndex = int.Parse(lines[currentLine].Trim());
                     currentLine++;
@@ -134,7 +132,7 @@ namespace Services
                     int mIndex = int.Parse(lines[currentLine].Trim());
                     currentLine++;
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
 
                     if (isSphere)
                         sceneObjects.Add(new SphereData(tIndex, mIndex));
@@ -144,13 +142,12 @@ namespace Services
                     continue;
                 }
 
-                // --- TRIANGLES ---
+                // Triângulos
                 if (line.StartsWith("Triangles"))
                 {
-                    currentLine++; // skip "Triangles"
-                    currentLine++; // skip "{"
+                    currentLine++; // saltar 'Triangles'
+                    currentLine++; // saltar '{'
 
-                    // Read transformation index
                     int tIndex = int.Parse(lines[currentLine].Trim());
                     currentLine++;
 
@@ -179,15 +176,15 @@ namespace Services
                         sceneObjects.Add(new TrianglePrimitive(tIndex, mIndex, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z));
                     }
 
-                    currentLine++; // skip "}"
+                    currentLine++; // saltar '}'
                     continue;
                 }
 
-                // --- CAMERA ---
+                // Camera
                 if (line.StartsWith("Camera"))
                 {
-                    currentLine++; // skip header
-                    currentLine++; // skip '{'
+                    currentLine++; // saltar 'Camera'
+                    currentLine++; // saltar '{'
 
                     int tIndex = int.Parse(lines[currentLine].Trim());
                     currentLine++;
@@ -196,17 +193,17 @@ namespace Services
                     float fov = float.Parse(lines[currentLine].Trim(), CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
 
                     sceneObjects.Add(new CameraData(tIndex, dist, fov));
                     continue;
                 }
 
-                // --- LIGHT ---
+                // Luz
                 if (line.StartsWith("Light"))
                 {
-                    currentLine++; // skip header
-                    currentLine++; // skip '{'
+                    currentLine++; // saltar 'Light'
+                    currentLine++; // saltar '{'
 
                     int tIndex = int.Parse(lines[currentLine].Trim());
                     currentLine++;
@@ -217,13 +214,13 @@ namespace Services
                     float b = float.Parse(parts[2], CultureInfo.InvariantCulture);
                     currentLine++;
 
-                    currentLine++; // skip '}'
+                    currentLine++; // saltar '}'
 
                     sceneObjects.Add(new LightData(tIndex, r, g, b));
                     continue;
                 }
 
-                // Default: next line
+                // Próximo objeto
                 currentLine++;
             }
         }

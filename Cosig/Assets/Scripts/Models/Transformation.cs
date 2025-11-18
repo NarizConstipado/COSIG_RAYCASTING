@@ -1,6 +1,5 @@
-// Models/Transformation.cs
 using UnityEngine;
-// Class to represent transformations for an object, including position, rotation, and scale
+
 [System.Serializable]
 public class Transformation
 {

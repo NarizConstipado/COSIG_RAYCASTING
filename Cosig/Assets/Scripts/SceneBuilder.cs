@@ -1,15 +1,12 @@
-// SceneBuilder.cs
 using System.Collections.Generic;
 using UnityEngine;
 using Models;
 using Services;
-
-// Unity component responsible for constructing and rendering the scene based on loaded data
 public class SceneBuilder : MonoBehaviour
 {
-    private SceneService sceneService = new SceneService(); // Service instance to load scene data
+    private SceneService sceneService = new SceneService();
 
-    private List<ObjectData> sceneObjects = new List<ObjectData>(); // List of scene objects
+    private List<ObjectData> sceneObjects = new List<ObjectData>();
     private List<Transformation> transformations = new List<Transformation>();
     private List<MaterialProperties> materials = new List<MaterialProperties>();
     void Start()
@@ -25,12 +22,12 @@ public class SceneBuilder : MonoBehaviour
         }
 
         sceneService.LoadScene(textFile.text, out sceneObjects, out transformations, out materials); // Load objects from configuration
-        BuildScene(); // Build and display the scene
+        BuildScene();
     }
-    // Method to create each object in the scene based on loaded data
+    // Method para criar cada objeto na cena
     void BuildScene()
     {
-        // Test Code
+        // Teste
         ImageSettings img = null;
         CameraData cam = null;
 
@@ -64,10 +61,11 @@ public class SceneBuilder : MonoBehaviour
                         new Vector2(1, 1)
                 };
 
-                int[] triangles = new int[] { 0, 1, 2 };
+                
+                int[] triangles = new int[] {0, 1, 2};
                 Vector3 normal = Vector3.Cross(triData.v2 - triData.v1, triData.v3 - triData.v1).normalized;
                 Debug.Log("Triangle normal: " + normal);
-                Vector3[] normals = new Vector3[] { normal, normal, normal };
+                Vector3[] normals = new Vector3[] {normal, normal, normal};
                 mesh.Clear();
                 mesh.vertices = vertices;
                 mesh.uv = uvs;
@@ -84,7 +82,7 @@ public class SceneBuilder : MonoBehaviour
                 camera.fieldOfView = camData.fov;
                 camObj.transform.position = new Vector3(0, 0, camData.distance);
                 obj = camObj;
-                // Test Code
+                // Teste
                 cam = camData;
             }
 
@@ -98,7 +96,7 @@ public class SceneBuilder : MonoBehaviour
 
             if (objData is ImageSettings imgData) img = imgData;
 
-            // Aplica cada transforma��o (se houverem)
+            // Identifica e aplica transformação
             int tIndex = objData switch
             {
                 SphereData s => s.transformationIndex,
@@ -114,6 +112,7 @@ public class SceneBuilder : MonoBehaviour
                 ApplyTransformation(obj, transformations[tIndex]);
             }
             
+            // Identifica e aplica material
             int mIndex = objData switch
             {
                 SphereData s => s.materialIndex,
@@ -135,15 +134,15 @@ public class SceneBuilder : MonoBehaviour
     void ApplyTransformation(GameObject obj, Transformation transformation)
     {
         if (transformation == null) return;
-        obj.transform.Translate(transformation.translation, Space.World); // Apply position
-        obj.transform.Rotate(transformation.rotation); // Apply rotation
-        obj.transform.localScale = transformation.scale; // Apply scale
+        obj.transform.Translate(transformation.translation, Space.World);
+        obj.transform.Rotate(transformation.rotation);
+        obj.transform.localScale = transformation.scale;
     }
     
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
         Material newMaterial = new Material(Shader.Find("Standard"));
-        newMaterial.color = properties.color; // Set color
+        newMaterial.color = properties.color;
 
         //newMaterial.SetFloat("_Metallic", (float)properties.specular);
         //newMaterial.SetFloat("_Glossiness", (float)properties.diffuse);
