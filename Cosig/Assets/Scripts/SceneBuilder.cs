@@ -13,7 +13,7 @@ public class SceneBuilder : MonoBehaviour
     {
         // Durante debugging usa o caminho absoluto ou um TextAsset em Resources.
         // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
-        TextAsset textFile = Resources.Load<TextAsset>("Config/Test Scene 1");
+        TextAsset textFile = Resources.Load<TextAsset>("Config/Test Scene 2");
 
         if (textFile == null)
         {
@@ -36,9 +36,9 @@ public class SceneBuilder : MonoBehaviour
             GameObject obj = null;
             if (objData is SphereData) obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
-            if (objData is BoxData) obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            else if (objData is BoxData) obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
-            if (objData is TrianglePrimitive triData)
+            else if (objData is TrianglePrimitive triData)
             {
                 obj = new GameObject("Triangle");
                 MeshFilter mf = obj.AddComponent<MeshFilter>();
@@ -64,7 +64,6 @@ public class SceneBuilder : MonoBehaviour
                 
                 int[] triangles = new int[] {0, 1, 2};
                 Vector3 normal = Vector3.Cross(triData.v2 - triData.v1, triData.v3 - triData.v1).normalized;
-                Debug.Log("Triangle normal: " + normal);
                 Vector3[] normals = new Vector3[] {normal, normal, normal};
                 mesh.Clear();
                 mesh.vertices = vertices;
@@ -75,7 +74,7 @@ public class SceneBuilder : MonoBehaviour
                 mesh.RecalculateBounds();
             }
 
-            if (objData is CameraData camData)
+            else if (objData is CameraData camData)
             {
                 var camObj = new GameObject("Camera");
                 var camera = camObj.AddComponent<Camera>();
@@ -86,7 +85,7 @@ public class SceneBuilder : MonoBehaviour
                 cam = camData;
             }
 
-            if (objData is LightData lightData)
+            else if (objData is LightData lightData)
             {
                 var lightObj = new GameObject("Light");
                 var light = lightObj.AddComponent<Light>();
@@ -94,7 +93,7 @@ public class SceneBuilder : MonoBehaviour
                 obj = lightObj;
             }
 
-            if (objData is ImageSettings imgData) img = imgData;
+            else if (objData is ImageSettings imgData) img = imgData;
 
             // Identifica e aplica transformação
             int tIndex = objData switch

@@ -61,26 +61,33 @@ namespace Services
                     currentLine++; // saltar 'Transformation'
                     currentLine++; // skip '{'
 
-                    Transformation t = new Transformation(0,0,0,0,0,0,0,0,0);
+                    Transformation t = new Transformation(0,0,0,0,0,0,1,1,1);
 
                     while (!lines[currentLine].Contains("}"))
                     {
                         string[] p = lines[currentLine].Trim().Split(' ');
 
                         if (p[0] == "T")
-                            t.translation = new Vector3(float.Parse(p[1]), float.Parse(p[2]), float.Parse(p[3]));
+                            t.translation = new Vector3(float.Parse(p[1], CultureInfo.InvariantCulture), float.Parse(p[2], CultureInfo.InvariantCulture), float.Parse(p[3], CultureInfo.InvariantCulture));
 
                         else if (p[0] == "Rx")
-                            t.rotation.x = float.Parse(p[1]);
+                            t.rotation.x = float.Parse(p[1], CultureInfo.InvariantCulture);
 
                         else if (p[0] == "Ry")
-                            t.rotation.y = float.Parse(p[1]);
+                            t.rotation.y = float.Parse(p[1], CultureInfo.InvariantCulture);
 
                         else if (p[0] == "Rz")
-                            t.rotation.z = float.Parse(p[1]);
+                            t.rotation.z = float.Parse(p[1], CultureInfo.InvariantCulture);
 
                         else if (p[0] == "S")
-                            t.scale = new Vector3(float.Parse(p[1]), float.Parse(p[2]), float.Parse(p[3]));
+                        {
+                            Debug.Log("Scale lido: " + p[0]);
+                            Debug.Log(p[1]);
+                            Debug.Log(p[2]);
+                            Debug.Log(p[3]);
+                            t.scale = new Vector3(float.Parse(p[1], CultureInfo.InvariantCulture), float.Parse(p[2], CultureInfo.InvariantCulture), float.Parse(p[3], CultureInfo.InvariantCulture));
+
+                        }
 
                         currentLine++;
                     }
