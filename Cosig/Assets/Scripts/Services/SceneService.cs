@@ -81,12 +81,7 @@ namespace Services
 
                         else if (p[0] == "S")
                         {
-                            Debug.Log("Scale lido: " + p[0]);
-                            Debug.Log(p[1]);
-                            Debug.Log(p[2]);
-                            Debug.Log(p[3]);
                             t.scale = new Vector3(float.Parse(p[1], CultureInfo.InvariantCulture), float.Parse(p[2], CultureInfo.InvariantCulture), float.Parse(p[3], CultureInfo.InvariantCulture));
-
                         }
 
                         currentLine++;

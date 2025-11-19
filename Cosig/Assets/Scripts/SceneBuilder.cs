@@ -4,6 +4,8 @@ using Models;
 using Services;
 public class SceneBuilder : MonoBehaviour
 {
+    public Material baseMaterial;
+
     private SceneService sceneService = new SceneService();
 
     private List<ObjectData> sceneObjects = new List<ObjectData>();
@@ -17,7 +19,7 @@ public class SceneBuilder : MonoBehaviour
 
         if (textFile == null)
         {
-            Debug.LogError("Could not load Test Scene 1.txt from Resources/Config/");
+            Debug.LogError("Could not load Test Scene from Resources/Config/");
             return;
         }
 
@@ -140,7 +142,7 @@ public class SceneBuilder : MonoBehaviour
     
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
-        Material newMaterial = new Material(Shader.Find("Standard"));
+        Material newMaterial = new Material(baseMaterial);
         newMaterial.color = properties.color;
 
         //newMaterial.SetFloat("_Metallic", (float)properties.specular);

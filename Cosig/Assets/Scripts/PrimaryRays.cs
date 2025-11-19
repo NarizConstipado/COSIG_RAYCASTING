@@ -48,6 +48,7 @@ public class PrimaryRays
                 Vector3 P = new Vector3(Px, Py, Pz);
 
                 Vector3 direction = (P - origin).normalized;
+                Debug.Log(direction);
 
                 Ray ray = new Ray(origin, direction);
 
