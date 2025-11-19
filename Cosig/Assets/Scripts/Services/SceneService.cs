@@ -9,6 +9,7 @@ namespace Services
 {
     public class SceneService
     {
+
         //Método para carregar os objetos da cena a partir do caminho do ficheiro dado
         public void LoadScene(string textContent, out List<ObjectData> sceneObjects, out List<Transformation> transformations, out List<MaterialProperties> materials)
         {

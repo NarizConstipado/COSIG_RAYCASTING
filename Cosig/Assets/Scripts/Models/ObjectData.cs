@@ -94,4 +94,16 @@ namespace Models
     {
         
     }
+
+    [System.Serializable]
+    public class SerializableObject
+    {
+        public string type;
+        public TrianglePrimitive triangle;
+        public SphereData sphere;
+        public BoxData box;
+        public LightData light;
+        public CameraData camera;
+        public ImageSettings image;
+    }
 }

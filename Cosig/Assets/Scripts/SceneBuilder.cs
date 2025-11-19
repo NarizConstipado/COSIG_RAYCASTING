@@ -2,28 +2,124 @@ using System.Collections.Generic;
 using UnityEngine;
 using Models;
 using Services;
+using System.IO;
+
 public class SceneBuilder : MonoBehaviour
 {
     public Material baseMaterial;
 
     private SceneService sceneService = new SceneService();
 
+    private SceneData sceneData = new SceneData();
+
     private List<ObjectData> sceneObjects = new List<ObjectData>();
     private List<Transformation> transformations = new List<Transformation>();
     private List<MaterialProperties> materials = new List<MaterialProperties>();
     void Start()
     {
-        // Durante debugging usa o caminho absoluto ou um TextAsset em Resources.
-        // Exemplo de Resource: "Config/Test Scene 1" (sem .txt) se o ficheiro estiver em Assets/Resources/Config/
-        TextAsset textFile = Resources.Load<TextAsset>("Config/Test Scene 2");
+        string resourceName = null;//"Config/Test Scene 1";
+        string jsonPath = Application.dataPath + "/Scripts/Resources/Config/Test Scene 1_js.json";
 
-        if (textFile == null)
+        // ---1) If JSON exists → USE JSON ---
+        if (File.Exists(jsonPath))
         {
-            Debug.LogError("Could not load Test Scene from Resources/Config/");
+            Debug.Log("Loading JSON scene: " + jsonPath);
+
+            string jsonFile = File.ReadAllText(jsonPath);
+            SceneData jsonData = JsonUtility.FromJson<SceneData>(jsonFile);
+
+            // Restore lists for BuildScene()
+            transformations = jsonData.transformations;
+            materials = jsonData.materials;
+
+            // Rebuild ObjectData list from SerializableObject list
+            foreach (var so in jsonData.objects)
+            {
+                switch (so.type)
+                {
+                    case "triangle": sceneObjects.Add(so.triangle); break;
+                    case "sphere": sceneObjects.Add(so.sphere); break;
+                    case "box": sceneObjects.Add(so.box); break;
+                    case "camera": sceneObjects.Add(so.camera); break;
+                    case "light": sceneObjects.Add(so.light); break;
+                    case "image": sceneObjects.Add(so.image); break;
+                    default:
+                        Debug.LogWarning("Unknown object type in JSON: " + so.type);
+                        break;
+                }
+            }
+
+            BuildScene();
             return;
         }
 
-        sceneService.LoadScene(textFile.text, out sceneObjects, out transformations, out materials); // Load objects from configuration
+        // --- 2) If NO JSON: load TXT ---
+        TextAsset txtFile = Resources.Load<TextAsset>(resourceName);
+
+        if (txtFile == null)
+        {
+            Debug.LogError("ERROR: Cannot load TXT or JSON at: " + resourceName);
+            return;
+        }
+
+        Debug.Log("TXT found → converting to JSON...");
+
+        // Parse TXT
+        sceneService.LoadScene(txtFile.text,
+            out sceneObjects,
+            out transformations,
+            out materials);
+
+        // Create SceneData
+        SceneData data = new SceneData();
+        data.objects = new List<SerializableObject>();
+        data.transformations = transformations;
+        data.materials = materials;
+
+        foreach (var obj in sceneObjects)
+        {
+            SerializableObject so = new SerializableObject();
+
+            if (obj is TrianglePrimitive t)
+            {
+                so.type = "triangle";
+                so.triangle = t;
+            }
+            else if (obj is SphereData s)
+            {
+                so.type = "sphere";
+                so.sphere = s;
+            }
+            else if (obj is BoxData b)
+            {
+                so.type = "box";
+                so.box = b;
+            }
+            else if (obj is LightData l)
+            {
+                so.type = "light";
+                so.light = l;
+            }
+            else if (obj is CameraData c)
+            {
+                so.type = "camera";
+                so.camera = c;
+            }
+            else if (obj is ImageSettings img)
+            {
+                so.type = "image";
+                so.image = img;
+            }
+
+            data.objects.Add(so);
+        }
+
+        // Save JSON
+        string jsonStringFile = JsonUtility.ToJson(data, true);
+        File.WriteAllText(jsonPath, jsonStringFile);
+
+        Debug.Log("TXT converted to JSON: " + jsonPath);
+
         BuildScene();
     }
     // Method para criar cada objeto na cena
