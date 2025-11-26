@@ -4,11 +4,18 @@ using Models;
 
 public class PrimaryRays
 {
+
+    private List<ObjectData> objects;
+    private List<Transformation> transformations;
+    private List<MaterialProperties> materials;
     private ImageSettings imageSettings;
     private CameraData camera;
 
-    public PrimaryRays(ImageSettings img, CameraData cam)
+    public PrimaryRays(List<ObjectData> objs, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
     {
+        objects = objs;
+        transformations = trans;
+        materials = mats;
         imageSettings = img;
         camera = cam;
     }
@@ -24,7 +31,7 @@ public class PrimaryRays
         tex.filterMode = FilterMode.Point;
 
         // Posição da câmera
-        Vector3 origin = new Vector3(0f, 0f, camera.distance);
+        Vector3 origin = new Vector3(0f, 0f, -camera.distance);
 
         // Converter FOV
         float fovRad = camera.fov * Mathf.PI / 180f;
@@ -76,6 +83,20 @@ public class PrimaryRays
 
     private Color traceRay(Ray ray, int rec)
     {
-        return new Color(0.4f, 0.5f, 0.6f);
+        Hit hit = new Hit
+        {
+            found = false,
+            tmin = float.PositiveInfinity
+        };
+
+        foreach (var obj in objects)
+        {
+            if (obj is SphereData sphere) sphere.Intersect(ray, transformations, materials, ref hit);
+            else if (obj is BoxData box) box.Intersect(ray, transformations, materials, ref hit);
+            else if (obj is TrianglePrimitive tri) tri.Intersect(ray, transformations, materials, ref hit);
+        }
+
+        if (hit.found) return hit.material.color;
+        else return Color.black;
     }
 }

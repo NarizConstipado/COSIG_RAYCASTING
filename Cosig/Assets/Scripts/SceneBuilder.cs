@@ -223,9 +223,11 @@ public class SceneBuilder : MonoBehaviour
             }
         }
 
-        PrimaryRays tracer = new PrimaryRays(img, cam);
+        PrimaryRays tracer = new PrimaryRays(sceneObjects, transformations, materials, img, cam);
 
         Texture2D tex = tracer.Render();
+        byte[] png = tex.EncodeToPNG();
+        System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
     }
 
     void ApplyTransformation(GameObject obj, Transformation transformation)
