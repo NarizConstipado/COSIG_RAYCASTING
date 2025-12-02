@@ -11,11 +11,12 @@ namespace Services
     {
 
         //Método para carregar os objetos da cena a partir do caminho do ficheiro dado
-        public void LoadScene(string textContent, out List<ObjectData> sceneObjects, out List<Transformation> transformations, out List<MaterialProperties> materials)
+        public void LoadScene(string textContent, out List<ObjectData> sceneObjects, out List<LightData> lights, out List<Transformation> transformations, out List<MaterialProperties> materials)
         {
             textContent = textContent.Replace("\r", "");
 
             sceneObjects = new List<ObjectData>();
+            lights = new List<LightData>();
             transformations = new List<Transformation>();
             materials = new List<MaterialProperties>();
 
@@ -219,7 +220,7 @@ namespace Services
 
                     currentLine++; // saltar '}'
 
-                    sceneObjects.Add(new LightData(tIndex, r, g, b));
+                    lights.Add(new LightData(tIndex, r, g, b));
                     continue;
                 }
 

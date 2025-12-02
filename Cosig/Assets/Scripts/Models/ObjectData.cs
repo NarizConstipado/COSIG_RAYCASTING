@@ -34,7 +34,7 @@ namespace Models
     }
 
     [System.Serializable]
-    public class LightData : ObjectData
+    public class LightData
     {
         public int transformationIndex;
         public Color color;

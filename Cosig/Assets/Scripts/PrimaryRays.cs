@@ -31,7 +31,7 @@ public class PrimaryRays
         tex.filterMode = FilterMode.Point;
 
         // Posição da câmera
-        Vector3 origin = new Vector3(0f, 0f, -camera.distance);
+        Vector3 origin = new Vector3(0f, 0f, camera.distance);
 
         // Converter FOV
         float fovRad = camera.fov * Mathf.PI / 180f;

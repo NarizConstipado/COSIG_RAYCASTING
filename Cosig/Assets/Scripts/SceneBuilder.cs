@@ -13,6 +13,7 @@ public class SceneBuilder : MonoBehaviour
     private SceneData sceneData = new SceneData();
 
     private List<ObjectData> sceneObjects = new List<ObjectData>();
+    private List<LightData> lights = new List<LightData>();
     private List<Transformation> transformations = new List<Transformation>();
     private List<MaterialProperties> materials = new List<MaterialProperties>();
     void Start()
@@ -41,7 +42,7 @@ public class SceneBuilder : MonoBehaviour
                     case "sphere": sceneObjects.Add(so.sphere); break;
                     case "box": sceneObjects.Add(so.box); break;
                     case "camera": sceneObjects.Add(so.camera); break;
-                    case "light": sceneObjects.Add(so.light); break;
+                    case "light": lights.Add(so.light); break;
                     case "image": sceneObjects.Add(so.image); break;
                     default:
                         Debug.LogWarning("Unknown object type in JSON: " + so.type);
@@ -67,6 +68,7 @@ public class SceneBuilder : MonoBehaviour
         // Parse TXT
         sceneService.LoadScene(txtFile.text,
             out sceneObjects,
+            out lights,
             out transformations,
             out materials);
 
@@ -95,11 +97,6 @@ public class SceneBuilder : MonoBehaviour
                 so.type = "box";
                 so.box = b;
             }
-            else if (obj is LightData l)
-            {
-                so.type = "light";
-                so.light = l;
-            }
             else if (obj is CameraData c)
             {
                 so.type = "camera";
@@ -111,6 +108,13 @@ public class SceneBuilder : MonoBehaviour
                 so.image = img;
             }
 
+            data.objects.Add(so);
+        }
+        foreach (var light in lights)
+        {
+            SerializableObject so = new SerializableObject();
+            so.type = "light";
+            so.light = light;
             data.objects.Add(so);
         }
 
@@ -183,14 +187,6 @@ public class SceneBuilder : MonoBehaviour
                 cam = camData;
             }
 
-            else if (objData is LightData lightData)
-            {
-                var lightObj = new GameObject("Light");
-                var light = lightObj.AddComponent<Light>();
-                light.color = lightData.color;
-                obj = lightObj;
-            }
-
             else if (objData is ImageSettings imgData) img = imgData;
 
             // Identifica e aplica transformação
@@ -200,7 +196,6 @@ public class SceneBuilder : MonoBehaviour
                 BoxData b => b.transformationIndex,
                 TrianglePrimitive t => t.transformationIndex,
                 CameraData c => c.transformationIndex,
-                LightData l => l.transformationIndex,
                 _ => -1
             };
 
@@ -221,6 +216,15 @@ public class SceneBuilder : MonoBehaviour
             {
                 ApplyMaterial(obj, materials[mIndex]);
             }
+        }
+        foreach(var lightData in lights)
+        {
+            GameObject obj = null;
+            var lightObj = new GameObject("Light");
+            var light = lightObj.AddComponent<Light>();
+            light.color = lightData.color;
+            obj = lightObj;
+            ApplyTransformation(lightObj, transformations[lightData.transformationIndex]);
         }
 
         PrimaryRays tracer = new PrimaryRays(sceneObjects, transformations, materials, img, cam);
