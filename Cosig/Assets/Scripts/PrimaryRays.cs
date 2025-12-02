@@ -6,14 +6,17 @@ public class PrimaryRays
 {
 
     private List<ObjectData> objects;
+    private List<LightData> lights;
     private List<Transformation> transformations;
     private List<MaterialProperties> materials;
     private ImageSettings imageSettings;
     private CameraData camera;
+    
 
-    public PrimaryRays(List<ObjectData> objs, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
+    public PrimaryRays(List<ObjectData> objs, List<LightData> lights, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
     {
         objects = objs;
+        lights = lights;
         transformations = trans;
         materials = mats;
         imageSettings = img;
@@ -83,6 +86,7 @@ public class PrimaryRays
 
     private Color traceRay(Ray ray, int rec)
     {
+        Color finalColor = Color.black;
         Hit hit = new Hit
         {
             found = false,
@@ -96,7 +100,32 @@ public class PrimaryRays
             else if (obj is TrianglePrimitive tri) tri.Intersect(ray, transformations, materials, ref hit);
         }
 
-        if (hit.found) return hit.material.color;
-        else return Color.black;
+        if (!hit.found) return finalColor;
+
+        foreach (var light in lights)
+        {
+            Matrix4x4 LT = transformations[light.transformationIndex].GetMatrix();
+            Vector3 lightPos = LT.MultiplyPoint(Vector3.zero);
+
+            finalColor += light.color *
+                        hit.material.color *
+                        hit.material.ambient;
+
+            Vector3 L = (lightPos - hit.point).normalized;
+
+            float cosTheta = Vector3.Dot(hit.normal, L);
+
+            if (cosTheta > 0f)
+            {
+                finalColor += light.color *
+                            hit.material.color *
+                            hit.material.diffuse *
+                            cosTheta;
+            }
+        }
+
+        finalColor /= lights.Count;
+
+        return finalColor;
     }
 }

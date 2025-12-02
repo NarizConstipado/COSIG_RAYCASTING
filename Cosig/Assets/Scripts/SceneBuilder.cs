@@ -227,7 +227,7 @@ public class SceneBuilder : MonoBehaviour
             ApplyTransformation(lightObj, transformations[lightData.transformationIndex]);
         }
 
-        PrimaryRays tracer = new PrimaryRays(sceneObjects, transformations, materials, img, cam);
+        PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
 
         Texture2D tex = tracer.Render();
         byte[] png = tex.EncodeToPNG();
