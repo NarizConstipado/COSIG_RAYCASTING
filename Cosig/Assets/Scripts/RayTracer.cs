@@ -107,20 +107,43 @@ public class PrimaryRays
             Matrix4x4 LT = transformations[light.transformationIndex].GetMatrix();
             Vector3 lightPos = LT.MultiplyPoint(Vector3.zero);
 
-            finalColor += light.color *
-                        hit.material.color *
-                        hit.material.ambient;
+            finalColor += light.color * hit.material.color * hit.material.ambient;
 
-            Vector3 L = (lightPos - hit.point).normalized;
+            Vector3 L = (lightPos - hit.point);
+            float tLight = L.magnitude;
+            L.Normalize();
 
             float cosTheta = Vector3.Dot(hit.normal, L);
 
             if (cosTheta > 0f)
             {
-                finalColor += light.color *
-                            hit.material.color *
-                            hit.material.diffuse *
-                            cosTheta;
+                const float epsilon = 0.0001f;
+                Vector3 shadowOrigin = hit.point + hit.normal * epsilon;
+
+                Ray shadowRay = new Ray(shadowOrigin, L);
+
+                Hit shadowHit = new Hit
+                {
+                    found = false,
+                    tmin = tLight
+                };
+
+                foreach (var obj in objects)
+                {
+                    if (obj is SphereData sphere) sphere.Intersect(shadowRay, transformations, materials, ref shadowHit);
+                    else if (obj is BoxData box) box.Intersect(shadowRay, transformations, materials, ref shadowHit);
+                    else if (obj is TrianglePrimitive tri) tri.Intersect(shadowRay, transformations, materials, ref shadowHit);
+
+                    if (shadowHit.found)
+                        break;
+                }
+
+                if (!shadowHit.found)
+                {
+                    finalColor += light.color * hit.material.color * hit.material.diffuse * cosTheta;
+                }
+
+
             }
         }
 

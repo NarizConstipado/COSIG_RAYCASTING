@@ -3,6 +3,7 @@ using UnityEngine;
 using Models;
 using Services;
 using System.IO;
+using UnityEngine.UI;
 
 public class SceneBuilder : MonoBehaviour
 {
@@ -16,6 +17,10 @@ public class SceneBuilder : MonoBehaviour
     private List<LightData> lights = new List<LightData>();
     private List<Transformation> transformations = new List<Transformation>();
     private List<MaterialProperties> materials = new List<MaterialProperties>();
+
+
+    public RawImage outputImage;
+
     void Start()
     {
         string resourceName = null;// "Config/Test Scene 1";
@@ -229,6 +234,8 @@ public class SceneBuilder : MonoBehaviour
         PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
 
         Texture2D tex = tracer.Render();
+
+        outputImage.texture = tex;
         byte[] png = tex.EncodeToPNG();
         System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
     }
