@@ -13,10 +13,10 @@ public class PrimaryRays
     private CameraData camera;
     
 
-    public PrimaryRays(List<ObjectData> objs, List<LightData> lights, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
+    public PrimaryRays(List<ObjectData> objs, List<LightData> lgts, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
     {
         objects = objs;
-        lights = lights;
+        lights = lgts;
         transformations = trans;
         materials = mats;
         imageSettings = img;
@@ -76,7 +76,7 @@ public class PrimaryRays
                     255
                 );
 
-                tex.SetPixel(i, j, pixelColor);
+                tex.SetPixel(Hres - 1 - i, Vres - 1 - j, pixelColor);
             }
         }
 

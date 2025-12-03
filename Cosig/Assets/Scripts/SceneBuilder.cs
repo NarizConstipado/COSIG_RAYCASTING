@@ -18,20 +18,19 @@ public class SceneBuilder : MonoBehaviour
     private List<MaterialProperties> materials = new List<MaterialProperties>();
     void Start()
     {
-        string resourceName = null;//"Config/Test Scene 1";
+        string resourceName = null;// "Config/Test Scene 1";
         string jsonPath = Application.dataPath + "/Scripts/Resources/Config/Test Scene 1_js.json";
 
-        // ---1) If JSON exists → USE JSON ---
+         //---1) If JSON exists → USE JSON ---
         if (File.Exists(jsonPath))
         {
-            Debug.Log("Loading JSON scene: " + jsonPath);
-
             string jsonFile = File.ReadAllText(jsonPath);
             SceneData jsonData = JsonUtility.FromJson<SceneData>(jsonFile);
 
             // Restore lists for BuildScene()
             transformations = jsonData.transformations;
             materials = jsonData.materials;
+           
 
             // Rebuild ObjectData list from SerializableObject list
             foreach (var so in jsonData.objects)
@@ -42,12 +41,16 @@ public class SceneBuilder : MonoBehaviour
                     case "sphere": sceneObjects.Add(so.sphere); break;
                     case "box": sceneObjects.Add(so.box); break;
                     case "camera": sceneObjects.Add(so.camera); break;
-                    case "light": lights.Add(so.light); break;
                     case "image": sceneObjects.Add(so.image); break;
                     default:
                         Debug.LogWarning("Unknown object type in JSON: " + so.type);
                         break;
                 }
+            }
+            // Reconstruir lista de luzes
+            foreach (var light in jsonData.lights)
+            {
+                lights.Add(light);
             }
 
             BuildScene();
@@ -62,9 +65,6 @@ public class SceneBuilder : MonoBehaviour
             Debug.LogError("ERROR: Cannot load TXT or JSON at: " + resourceName);
             return;
         }
-
-        Debug.Log("TXT found → converting to JSON...");
-
         // Parse TXT
         sceneService.LoadScene(txtFile.text,
             out sceneObjects,
@@ -75,6 +75,7 @@ public class SceneBuilder : MonoBehaviour
         // Create SceneData
         SceneData data = new SceneData();
         data.objects = new List<SerializableObject>();
+        data.lights = new List<LightData>();
         data.transformations = transformations;
         data.materials = materials;
 
@@ -112,10 +113,8 @@ public class SceneBuilder : MonoBehaviour
         }
         foreach (var light in lights)
         {
-            SerializableObject so = new SerializableObject();
-            so.type = "light";
-            so.light = light;
-            data.objects.Add(so);
+            LightData lightData = light;
+            data.lights.Add(light);
         }
 
         // Save JSON

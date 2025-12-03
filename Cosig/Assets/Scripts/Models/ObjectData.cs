@@ -128,44 +128,65 @@ namespace Models
             materialIndex = mIndex;
         }
 
-        public void Intersect(Ray ray, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
+        public void Intersect(Ray rayWorld, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
         {
             const float EPS = 1e-6f;
 
+            // Segurança: valida index
+            if (transformationIndex < 0 || transformationIndex >= transformations.Count)
+            {
+                Debug.LogWarning("Sphere has invalid transformationIndex: " + transformationIndex);
+                return;
+            }
+
             Transformation T = transformations[transformationIndex];
 
-            // Converter o raio para o espaço local
+            // Matriz inversa para trazer o raio para o espaço local do objecto
             Matrix4x4 Tinv = T.GetInverseMatrix();
-            Vector3 localOrigin = T.GetInverseMatrix().MultiplyPoint(ray.origin);
-            Vector3 localDir    = T.GetInverseMatrix().MultiplyVector(ray.direction).normalized;
+
+            // Transformar origem e direcção (direcção sem translação)
+            Vector3 localOrigin = Tinv.MultiplyPoint(rayWorld.origin);
+            Vector3 localDir = Tinv.MultiplyVector(rayWorld.direction); // NÃO normalizamos ainda
+
+            // IMPORTANTE: normalizar depois da transformação — se o transform contém escala, normalizar aqui é OK
+            localDir.Normalize();
+
             Ray localRay = new Ray(localOrigin, localDir);
 
-            // Interseção no espaço local
+            // Parametros da esfera no espaço local (sphere unitária centrada na origem com raio 0.5)
+            Vector3 localCenter = Vector3.zero;
+            float localRadius = 0.5f;
+
+            // Interseção clássico: a*t^2 + b*t + c = 0
             Vector3 L = localRay.origin - localCenter;
             float a = Vector3.Dot(localRay.direction, localRay.direction);
             float b = 2f * Vector3.Dot(localRay.direction, L);
             float c = Vector3.Dot(L, L) - localRadius * localRadius;
 
-            float discriminant  = b * b - 4f * a * c;
-            if (discriminant  < 0f) return;
+            float discriminant = b * b - 4f * a * c;
+            if (discriminant < 0f) return;
 
             float sqrtD = Mathf.Sqrt(discriminant);
             float t0 = (-b - sqrtD) / (2f * a);
             float t1 = (-b + sqrtD) / (2f * a);
 
-            float tLocal = t0 > EPS ? t0 : (t1 > EPS ? t1 : -1f);
+            // escolher o primeiro t positivo maior que EPS
+            float tLocal = (t0 > EPS) ? t0 : ((t1 > EPS) ? t1 : -1f);
             if (tLocal < 0f) return;
 
-            // Converte ponto e normal para o espaço do mundo
+            // Ponto e normal no espaço local
             Vector3 localPoint = localRay.origin + tLocal * localRay.direction;
+            Vector3 localNormal = (localPoint - localCenter).normalized;
+
+            // Converter para espaço world
             Vector3 worldPoint = T.GetMatrix().MultiplyPoint(localPoint);
-            Vector3 worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(localPoint - localCenter).normalized;
+            Vector3 worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(localNormal).normalized;
 
-            // Calcula distância no espaço do mundo
-            float tWorld = (worldPoint - ray.origin).magnitude;
+            // Distância no espaço world (para comparação com hit.tmin)
+            float tWorld = (worldPoint - rayWorld.origin).magnitude;
 
-            // Atualiza hit se for o mais próximo
-            if (tWorld < hit.tmin)
+            // Atualiza hit se for mais perto
+            if (tWorld > EPS && tWorld < hit.tmin)
             {
                 hit.found = true;
                 hit.tmin = tWorld;
@@ -270,7 +291,6 @@ namespace Models
         public TrianglePrimitive triangle;
         public SphereData sphere;
         public BoxData box;
-        public LightData light;
         public CameraData camera;
         public ImageSettings image;
     }

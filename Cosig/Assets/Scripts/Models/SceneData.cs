@@ -6,6 +6,7 @@ using Models;
 public class SceneData
 {
     public List<SerializableObject> objects;
+    public List<LightData> lights;
     public List<Transformation> transformations;
     public List<MaterialProperties> materials;
 }
