@@ -20,8 +20,9 @@ public class GPUPrimaryRays : MonoBehaviour
     {
         if (imgSettings != null)
         {
-            int width = Mathf.CeilToInt(imgSettings.size.x / 8f) * 8;
-            int height = Mathf.CeilToInt(imgSettings.size.y / 8f) * 8;
+            // Atualiza os campos da instância com a resolução correta (multiplo de 8 para dispatch)
+            this.width = Mathf.CeilToInt(imgSettings.size.x / 8f) * 8;
+            this.height = Mathf.CeilToInt(imgSettings.size.y / 8f) * 8;
         }
 
         // Procura a câmera principal automaticamente
@@ -76,8 +77,8 @@ public class GPUPrimaryRays : MonoBehaviour
         matBuffer.Dispose();
         lightBuffer.Dispose();
 
-        // Copia RenderTexture para PNG
-        SaveRenderTextureToPNG(outputTexture, Application.dataPath + "/RayTraceOutput.png");
+        // Copia RenderTexture para PNG (nome com _gpu)
+        SaveRenderTextureToPNG(outputTexture, Application.dataPath + "/RayTraceOutput_gpu.png");
 
         // Opcional: atribui a RawImage ou quad para visualização
         var renderer = GetComponent<Renderer>();

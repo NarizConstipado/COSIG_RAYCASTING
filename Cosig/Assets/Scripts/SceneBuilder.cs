@@ -305,20 +305,49 @@ public class SceneBuilder : MonoBehaviour
             }
             else if (obj is BoxData b)
             {
-                // Conversão para GPU: manter min/max no espaço local da caixa e fornecer matrizes
-                gObj.type = 2; // Box
+                gObj.type = (int)ObjectType.Box;
                 gObj.materialIndex = b.materialIndex;
 
                 Transformation T = transformations[b.transformationIndex];
-                gObj.min = b.min;
-                gObj.max = b.max;
 
-                gObj.matWorld = T.GetMatrix();
-                gObj.invMatWorld = T.GetInverseMatrix();
-                gObj.invTranspMatWorld = T.GetInverseTransposeMatrix();
+                Matrix4x4 M = T.GetMatrix();
+                Matrix4x4 Minv = T.GetInverseMatrix();
+                Matrix4x4 MinvT = T.GetInverseTransposeMatrix();
 
-                // opcional: centro aproximado no mundo (não usado pelo shader para box)
-                gObj.center = T.GetMatrix().MultiplyPoint((b.min + b.max) * 0.5f);
+                gObj.matWorld = M;
+                gObj.invMatWorld = Minv;
+                gObj.invTranspMatWorld = MinvT;
+
+                // AABB local da box unitária
+                Vector3 localMin = new Vector3(-0.5f, -0.5f, -0.5f);
+                Vector3 localMax = new Vector3(0.5f, 0.5f, 0.5f);
+
+                // Transformação correta dos 8 vértices da caixa
+                Vector3[] corners = new Vector3[8]
+                {
+        new Vector3(localMin.x, localMin.y, localMin.z),
+        new Vector3(localMin.x, localMin.y, localMax.z),
+        new Vector3(localMin.x, localMax.y, localMin.z),
+        new Vector3(localMin.x, localMax.y, localMax.z),
+        new Vector3(localMax.x, localMin.y, localMin.z),
+        new Vector3(localMax.x, localMin.y, localMax.z),
+        new Vector3(localMax.x, localMax.y, localMin.z),
+        new Vector3(localMax.x, localMax.y, localMax.z),
+                };
+
+                Vector3 wMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                Vector3 wMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+
+                for (int c = 0; c < 8; c++)
+                {
+                    Vector3 wc = M.MultiplyPoint(corners[c]);
+                    wMin = Vector3.Min(wMin, wc);
+                    wMax = Vector3.Max(wMax, wc);
+                }
+
+                // Guardar as extremidades transformadas
+                gObj.min = wMin;
+                gObj.max = wMax;
             }
 
             gpuObjects[i] = gObj;
