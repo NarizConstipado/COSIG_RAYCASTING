@@ -4,6 +4,46 @@ using UnityEngine;
 
 namespace Models
 {
+    public enum ObjectType { Sphere = 0, Triangle = 1, Box = 2 }
+
+    public struct GPUObject
+    {
+        public int type;           // 0 = Sphere, 1 = Triangle
+        public int materialIndex;
+
+        // Sphere
+        public Vector3 center;
+        public float radius;
+
+        // Triangle
+        public Vector3 v0;
+        public Vector3 v1;
+        public Vector3 v2;
+
+        // Box
+        public Vector3 min;
+        public Vector3 max;
+
+        // Transformação
+        public Matrix4x4 matWorld;
+        public Matrix4x4 invMatWorld;
+        public Matrix4x4 invTranspMatWorld;
+    }
+
+    public struct GPUMaterial
+    {
+        public Vector3 color;
+        public float ambient;
+        public float diffuse;
+        public float specular;
+    }
+
+    public struct GPULight
+    {
+        public Vector3 position;
+        public Vector3 color;
+    }
+
     [System.Serializable]
     public class ImageSettings : ObjectData
     {

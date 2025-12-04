@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: f625511fff053a74c843603824213b60
+guid: 4cb0df4d1e028ef488d026baa596b800
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6022159590148650216
-    second: RayTraceOutput_0
+      213: 155632179296670195
+    second: RayTraceOutput_gpu_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -100,7 +100,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: RayTraceOutput_0
+      name: RayTraceOutput_gpu_0
       rect:
         serializedVersion: 2
         x: 0
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 81b4a7072cdfc6ca0800000000000000
-      internalID: -6022159590148650216
+      spriteID: 3f1199a74aae82200800000000000000
+      internalID: 155632179296670195
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      RayTraceOutput_0: -6022159590148650216
+      RayTraceOutput_gpu_0: 155632179296670195
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

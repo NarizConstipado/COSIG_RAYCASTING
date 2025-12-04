@@ -18,7 +18,6 @@ public class SceneBuilder : MonoBehaviour
     private List<Transformation> transformations = new List<Transformation>();
     private List<MaterialProperties> materials = new List<MaterialProperties>();
 
-
     public RawImage outputImage;
 
     void Start()
@@ -186,8 +185,8 @@ public class SceneBuilder : MonoBehaviour
                 var camera = camObj.AddComponent<Camera>();
                 camera.fieldOfView = camData.fov;
                 camObj.transform.position = new Vector3(0, 0, camData.distance);
+                camObj.tag = "MainCamera";
                 obj = camObj;
-                // Teste
                 cam = camData;
             }
 
@@ -231,13 +230,15 @@ public class SceneBuilder : MonoBehaviour
             ApplyTransformation(lightObj, transformations[lightData.transformationIndex]);
         }
 
-        PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
+        //PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
 
-        Texture2D tex = tracer.Render();
+        //Texture2D tex = tracer.Render();
 
-        outputImage.texture = tex;
-        byte[] png = tex.EncodeToPNG();
-        System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
+        //outputImage.texture = tex;
+        //byte[] png = tex.EncodeToPNG();
+        //System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
+        
+        RenderGPU(img);
     }
 
     void ApplyTransformation(GameObject obj, Transformation transformation)
@@ -264,5 +265,122 @@ public class SceneBuilder : MonoBehaviour
 
         var renderer = obj.GetComponent<Renderer>();
         if (renderer != null) renderer.material = newMaterial;
+    }
+
+    private GPUObject[] ConvertObjectsToGPU()
+    {
+        GPUObject[] gpuObjects = new GPUObject[sceneObjects.Count];
+
+        for (int i = 0; i < sceneObjects.Count; i++)
+        {
+            ObjectData obj = sceneObjects[i];
+            GPUObject gObj = new GPUObject();
+
+            if (obj is SphereData s)
+            {
+                gObj.type = (int)ObjectType.Sphere;
+                gObj.materialIndex = s.materialIndex;
+
+                Transformation T = transformations[s.transformationIndex];
+                gObj.center = T.translation; // Sphere unitária transformada
+                gObj.radius = 0.5f * Mathf.Max(T.scale.x, Mathf.Max(T.scale.y, T.scale.z));
+
+                gObj.matWorld = T.GetMatrix();
+                gObj.invMatWorld = T.GetInverseMatrix();
+                gObj.invTranspMatWorld = T.GetInverseTransposeMatrix();
+            }
+            else if (obj is TrianglePrimitive t)
+            {
+                gObj.type = (int)ObjectType.Triangle;
+                gObj.materialIndex = t.materialIndex;
+
+                Transformation T = transformations[t.transformationIndex];
+                gObj.v0 = T.GetMatrix().MultiplyPoint(t.v1);
+                gObj.v1 = T.GetMatrix().MultiplyPoint(t.v2);
+                gObj.v2 = T.GetMatrix().MultiplyPoint(t.v3);
+
+                gObj.matWorld = T.GetMatrix();
+                gObj.invMatWorld = T.GetInverseMatrix();
+                gObj.invTranspMatWorld = T.GetInverseTransposeMatrix();
+            }
+            else if (obj is BoxData b)
+            {
+                // Conversão para GPU: manter min/max no espaço local da caixa e fornecer matrizes
+                gObj.type = 2; // Box
+                gObj.materialIndex = b.materialIndex;
+
+                Transformation T = transformations[b.transformationIndex];
+                gObj.min = b.min;
+                gObj.max = b.max;
+
+                gObj.matWorld = T.GetMatrix();
+                gObj.invMatWorld = T.GetInverseMatrix();
+                gObj.invTranspMatWorld = T.GetInverseTransposeMatrix();
+
+                // opcional: centro aproximado no mundo (não usado pelo shader para box)
+                gObj.center = T.GetMatrix().MultiplyPoint((b.min + b.max) * 0.5f);
+            }
+
+            gpuObjects[i] = gObj;
+        }
+
+        return gpuObjects;
+    }
+
+    private GPUMaterial[] ConvertMaterialsToGPU()
+    {
+        GPUMaterial[] gpuMaterials = new GPUMaterial[materials.Count];
+        for (int i = 0; i < materials.Count; i++)
+        {
+            MaterialProperties m = materials[i];
+            gpuMaterials[i] = new GPUMaterial
+            {
+                color = new Vector3(m.color.r, m.color.g, m.color.b),
+                ambient = m.ambient,
+                diffuse = m.diffuse,
+                specular = m.specular
+            };
+        }
+        return gpuMaterials;
+    }
+
+    private GPULight[] ConvertLightsToGPU()
+    {
+        GPULight[] gpuLights = new GPULight[lights.Count];
+        for (int i = 0; i < lights.Count; i++)
+        {
+            LightData l = lights[i];
+            Transformation T = transformations[l.transformationIndex];
+
+            gpuLights[i] = new GPULight
+            {
+                position = T.translation,
+                color = new Vector3(l.color.r, l.color.g, l.color.b)
+            };
+        }
+        return gpuLights;
+    }
+
+    private void RenderGPU(ImageSettings imgSettings)
+    {
+        GPUObject[] gpuObjects = ConvertObjectsToGPU();
+        GPUMaterial[] gpuMaterials = ConvertMaterialsToGPU();
+        GPULight[] gpuLights = ConvertLightsToGPU();
+
+        GPUPrimaryRays gpuRayTracer = GetComponent<GPUPrimaryRays>();
+        if (gpuRayTracer == null)
+        {
+            Debug.LogError("GPUPrimaryRays component not found! Please add it to the same GameObject.");
+            return;
+        }
+
+        gpuRayTracer.gpuObjects = gpuObjects;
+        gpuRayTracer.gpuMaterials = gpuMaterials;
+        gpuRayTracer.gpuLights = gpuLights;
+
+        gpuRayTracer.Render(imgSettings);
+
+        if (outputImage != null)
+            outputImage.texture = gpuRayTracer.outputTexture;
     }
 }
