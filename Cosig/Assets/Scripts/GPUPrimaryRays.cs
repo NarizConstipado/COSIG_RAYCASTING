@@ -15,7 +15,6 @@ public class GPUPrimaryRays : MonoBehaviour
     private int width = 512;
     private int height = 512;
 
-    // Deve ser chamada pelo SceneBuilder, passando ImageSettings
     public void Render(ImageSettings imgSettings)
     {
         if (imgSettings != null)
@@ -25,7 +24,6 @@ public class GPUPrimaryRays : MonoBehaviour
             this.height = Mathf.CeilToInt(imgSettings.size.y / 8f) * 8;
         }
 
-        // Procura a câmera principal automaticamente
         if (cam == null)
         {
             cam = Camera.main;
@@ -36,14 +34,12 @@ public class GPUPrimaryRays : MonoBehaviour
             }
         }
 
-        // Cria RenderTexture para a GPU
         outputTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBFloat);
         outputTexture.enableRandomWrite = true;
         outputTexture.Create();
 
         int kernel = rayShader.FindKernel("CSMain");
 
-        // Buffers GPU
         ComputeBuffer objBuffer = new ComputeBuffer(gpuObjects.Length, System.Runtime.InteropServices.Marshal.SizeOf(typeof(GPUObject)));
         objBuffer.SetData(gpuObjects);
         rayShader.SetBuffer(kernel, "objects", objBuffer);
@@ -58,7 +54,6 @@ public class GPUPrimaryRays : MonoBehaviour
 
         rayShader.SetTexture(kernel, "Result", outputTexture);
 
-        // Camera params
         rayShader.SetVector("camPos", cam.transform.position);
         rayShader.SetVector("camForward", cam.transform.forward);
         rayShader.SetVector("camRight", cam.transform.right);
@@ -67,20 +62,16 @@ public class GPUPrimaryRays : MonoBehaviour
         rayShader.SetInt("width", width);
         rayShader.SetInt("height", height);
 
-        // Dispatch
         int threadX = Mathf.CeilToInt(width / 8f);
         int threadY = Mathf.CeilToInt(height / 8f);
         rayShader.Dispatch(kernel, threadX, threadY, 1);
 
-        // Limpeza buffers
         objBuffer.Dispose();
         matBuffer.Dispose();
         lightBuffer.Dispose();
 
-        // Copia RenderTexture para PNG (nome com _gpu)
         SaveRenderTextureToPNG(outputTexture, Application.dataPath + "/RayTraceOutput_gpu.png");
 
-        // Opcional: atribui a RawImage ou quad para visualização
         var renderer = GetComponent<Renderer>();
         if (renderer != null)
             renderer.material.mainTexture = outputTexture;

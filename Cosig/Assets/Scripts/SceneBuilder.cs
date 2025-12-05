@@ -25,18 +25,13 @@ public class SceneBuilder : MonoBehaviour
         string resourceName = null;// "Config/Test Scene 1";
         string jsonPath = Application.dataPath + "/Scripts/Resources/Config/Test Scene 1_js.json";
 
-         //---1) If JSON exists → USE JSON ---
         if (File.Exists(jsonPath))
         {
             string jsonFile = File.ReadAllText(jsonPath);
             SceneData jsonData = JsonUtility.FromJson<SceneData>(jsonFile);
 
-            // Restore lists for BuildScene()
             transformations = jsonData.transformations;
             materials = jsonData.materials;
-           
-
-            // Rebuild ObjectData list from SerializableObject list
             foreach (var so in jsonData.objects)
             {
                 switch (so.type)
@@ -51,7 +46,6 @@ public class SceneBuilder : MonoBehaviour
                         break;
                 }
             }
-            // Reconstruir lista de luzes
             foreach (var light in jsonData.lights)
             {
                 lights.Add(light);
@@ -61,7 +55,6 @@ public class SceneBuilder : MonoBehaviour
             return;
         }
 
-        // --- 2) If NO JSON: load TXT ---
         TextAsset txtFile = Resources.Load<TextAsset>(resourceName);
 
         if (txtFile == null)
@@ -69,14 +62,12 @@ public class SceneBuilder : MonoBehaviour
             Debug.LogError("ERROR: Cannot load TXT or JSON at: " + resourceName);
             return;
         }
-        // Parse TXT
         sceneService.LoadScene(txtFile.text,
             out sceneObjects,
             out lights,
             out transformations,
             out materials);
 
-        // Create SceneData
         SceneData data = new SceneData();
         data.objects = new List<SerializableObject>();
         data.lights = new List<LightData>();
@@ -121,7 +112,6 @@ public class SceneBuilder : MonoBehaviour
             data.lights.Add(light);
         }
 
-        // Save JSON
         string jsonStringFile = JsonUtility.ToJson(data, true);
         File.WriteAllText(jsonPath, jsonStringFile);
 
@@ -132,7 +122,6 @@ public class SceneBuilder : MonoBehaviour
     // Method para criar cada objeto na cena
     void BuildScene()
     {
-        // Teste
         ImageSettings img = null;
         CameraData cam = null;
 
@@ -192,7 +181,7 @@ public class SceneBuilder : MonoBehaviour
 
             else if (objData is ImageSettings imgData) img = imgData;
 
-            // Identifica e aplica transformação
+
             int tIndex = objData switch
             {
                 SphereData s => s.transformationIndex,
@@ -230,6 +219,7 @@ public class SceneBuilder : MonoBehaviour
             ApplyTransformation(lightObj, transformations[lightData.transformationIndex]);
         }
 
+        // --- Render CPU ---
         //PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
 
         //Texture2D tex = tracer.Render();
@@ -237,7 +227,17 @@ public class SceneBuilder : MonoBehaviour
         //outputImage.texture = tex;
         //byte[] png = tex.EncodeToPNG();
         //System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
-        
+
+        // --- Build BVH ---
+        BVHBuilder bvh = new BVHBuilder();
+        bvh.GatherPrimitives(sceneObjects, transformations);
+        bvh.BuildRecursive();
+
+        // Debugger para visualizar a BVH na cena
+        var viewerGO = new GameObject("BVH Debug Viewer");
+        var viewer = viewerGO.AddComponent<DebugBVHViewer>();
+        viewer.bvh = bvh;
+
         RenderGPU(img);
     }
 
@@ -318,36 +318,12 @@ public class SceneBuilder : MonoBehaviour
                 gObj.invMatWorld = Minv;
                 gObj.invTranspMatWorld = MinvT;
 
-                // AABB local da box unitária
-                Vector3 localMin = new Vector3(-0.5f, -0.5f, -0.5f);
-                Vector3 localMax = new Vector3(0.5f, 0.5f, 0.5f);
+                gObj.min = b.min;
+                gObj.max = b.max;
 
-                // Transformação correta dos 8 vértices da caixa
-                Vector3[] corners = new Vector3[8]
-                {
-        new Vector3(localMin.x, localMin.y, localMin.z),
-        new Vector3(localMin.x, localMin.y, localMax.z),
-        new Vector3(localMin.x, localMax.y, localMin.z),
-        new Vector3(localMin.x, localMax.y, localMax.z),
-        new Vector3(localMax.x, localMin.y, localMin.z),
-        new Vector3(localMax.x, localMin.y, localMax.z),
-        new Vector3(localMax.x, localMax.y, localMin.z),
-        new Vector3(localMax.x, localMax.y, localMax.z),
-                };
-
-                Vector3 wMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
-                Vector3 wMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
-
-                for (int c = 0; c < 8; c++)
-                {
-                    Vector3 wc = M.MultiplyPoint(corners[c]);
-                    wMin = Vector3.Min(wMin, wc);
-                    wMax = Vector3.Max(wMax, wc);
-                }
-
-                // Guardar as extremidades transformadas
-                gObj.min = wMin;
-                gObj.max = wMax;
+                gObj.v0 = Vector3.zero; gObj.v1 = Vector3.zero; gObj.v2 = Vector3.zero;
+                gObj.center = M.MultiplyPoint(Vector3.zero);
+                gObj.radius = 0f;
             }
 
             gpuObjects[i] = gObj;

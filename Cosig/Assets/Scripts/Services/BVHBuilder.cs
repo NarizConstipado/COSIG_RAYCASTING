@@ -11,17 +11,16 @@ public struct BVHNode
     public int left;
     public int right;
     public int firstPrim;   // índice no array de prims
-    public int primCount;   // quantos prims neste nó (leaf)
+    public int primCount;   // quantos prims neste nó
 }
 
 public class BVHBuilder
 {
-    // We'll represent primitives by bounding box + reference to object index + primitive type flag
     public struct PrimRef
     {
         public Vector3 min, max;
         public int objIndex;
-        public int primType; // 0 = sphere, 1 = triangle, 2 = box
+        public int primType; // 0 = esfera, 1 = trianglo, 2 = cubo
         public int primSubIndex;
     }
 
@@ -43,7 +42,6 @@ public class BVHBuilder
     // para esferas (centro + raio no espaço world) — aproximação pela bbox com escala isotrópica
     public List<Vector4> primSphereCenterRadius = new List<Vector4>();
 
-    // Simple entry: gather AABBs per object
     public void GatherPrimitives(List<ObjectData> sceneObjects, List<Transformation> transformations)
     {
         prims.Clear();
@@ -61,10 +59,8 @@ public class BVHBuilder
 
             if (obj is SphereData s)
             {
-                // sphere: assume unit sphere centered at origin with radius 0.5 local
                 Transformation T = transformations[s.transformationIndex];
                 Matrix4x4 M = T.GetMatrix();
-                // compute world-space bbox corners (transform unit sphere bbox)
                 Vector3 localMin = new Vector3(-0.5f, -0.5f, -0.5f);
                 Vector3 localMax = new Vector3(0.5f, 0.5f, 0.5f);
                 Vector3 wmin = M.MultiplyPoint(localMin);
@@ -76,9 +72,7 @@ public class BVHBuilder
 
                 primMin.Add(mn); primMax.Add(mx); primType.Add(0); primObjIndex.Add(i);
 
-                // estimate center and radius in world
                 Vector3 center = M.MultiplyPoint(Vector3.zero);
-                // approximate radius by scaling the local radius by max scale component
                 Vector3 scale = new Vector3(T.scale.x, T.scale.y, T.scale.z);
                 float maxScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
                 float radius = 0.5f * maxScale;
@@ -107,24 +101,55 @@ public class BVHBuilder
             }
             else if (obj is BoxData box)
             {
+                Vector3 localMin = new Vector3(-0.5f, -0.5f, -0.5f);
+                Vector3 localMax = new Vector3(0.5f, 0.5f, 0.5f);
+
                 Transformation T = transformations[box.transformationIndex];
                 Matrix4x4 M = T.GetMatrix();
 
-                Vector3 min = M.MultiplyPoint(box.min);
-                Vector3 max = M.MultiplyPoint(box.max);
-                Vector3 mn = Vector3.Min(min, max);
-                Vector3 mx = Vector3.Max(min, max);
+                Vector3[] corners =
+                {
+                    new Vector3(localMin.x, localMin.y, localMin.z),
+                    new Vector3(localMin.x, localMin.y, localMax.z),
+                    new Vector3(localMin.x, localMax.y, localMin.z),
+                    new Vector3(localMin.x, localMax.y, localMax.z),
+                    new Vector3(localMax.x, localMin.y, localMin.z),
+                    new Vector3(localMax.x, localMin.y, localMax.z),
+                    new Vector3(localMax.x, localMax.y, localMin.z),
+                    new Vector3(localMax.x, localMax.y, localMax.z)
+                };
 
-                prims.Add(new PrimRef { min = mn, max = mx, objIndex = i, primType = 2, primSubIndex = 0 });
+                Vector3 wMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                Vector3 wMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
 
-                primMin.Add(mn); primMax.Add(mx); primType.Add(2); primObjIndex.Add(i);
+                for (int c = 0; c < 8; c++)
+                {
+                    Vector3 wc = M.MultiplyPoint(corners[c]);
+                    wMin = Vector3.Min(wMin, wc);
+                    wMax = Vector3.Max(wMax, wc);
+                }
 
-                primTriV0.Add(Vector3.zero); primTriV1.Add(Vector3.zero); primTriV2.Add(Vector3.zero);
+                prims.Add(new PrimRef
+                {
+                    min = wMin,
+                    max = wMax,
+                    objIndex = i,
+                    primType = 2,
+                    primSubIndex = 0
+                });
+
+                primMin.Add(wMin);
+                primMax.Add(wMax);
+                primType.Add(2);
+                primObjIndex.Add(i);
+
+                primTriV0.Add(Vector3.zero);
+                primTriV1.Add(Vector3.zero);
+                primTriV2.Add(Vector3.zero);
                 primSphereCenterRadius.Add(Vector4.zero);
             }
         }
 
-        // initial indices
         primIndices.Clear();
         for (int i = 0; i < prims.Count; i++) primIndices.Add(i);
     }
@@ -139,9 +164,7 @@ public class BVHBuilder
 
     private int BuildNode(int start, int count, int depth)
     {
-        // create node placeholder
         BVHNode node = new BVHNode();
-        // compute bbox of range
         Vector3 min = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         Vector3 max = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
         for (int i = start; i < start + count; i++)
@@ -155,11 +178,10 @@ public class BVHBuilder
         node.left = -1; node.right = -1; node.firstPrim = -1; node.primCount = 0;
 
         int nodeIndex = nodes.Count;
-        nodes.Add(node); // reserve
+        nodes.Add(node);
 
         if (count <= 2 || depth > 32)
         {
-            // make leaf
             node = nodes[nodeIndex];
             node.firstPrim = start;
             node.primCount = count;
@@ -167,13 +189,11 @@ public class BVHBuilder
             return nodeIndex;
         }
 
-        // choose axis by largest extent
         Vector3 extent = max - min;
         int axis = 0;
         if (extent.y > extent.x && extent.y > extent.z) axis = 1;
         else if (extent.z > extent.x && extent.z > extent.y) axis = 2;
 
-        // sort range by centroid along axis (median split)
         primIndices.Sort(start, count, Comparer<int>.Create((iA, iB) =>
         {
             float ca = (prims[iA].min[axis] + prims[iA].max[axis]) * 0.5f;
@@ -191,8 +211,6 @@ public class BVHBuilder
         nodes[nodeIndex] = node;
         return nodeIndex;
     }
-
-    // packs nodes to arrays for GPU upload (float arrays or structured buffers)
     public void PackForGPU(out Vector3[] nodeMins, out Vector3[] nodeMaxs, out int[] nodeLeft, out int[] nodeRight, out int[] nodeFirstPrim, out int[] nodePrimCount,
                            out Vector3[] outPrimMin, out Vector3[] outPrimMax, out int[] outPrimType, out int[] outPrimObjIndex,
                            out Vector3[] outTriV0, out Vector3[] outTriV1, out Vector3[] outTriV2, out Vector4[] outSphereCenterRadius)
