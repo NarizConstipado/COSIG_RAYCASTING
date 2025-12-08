@@ -114,52 +114,52 @@ void CSMain (uint3 id : SV_DispatchThreadID)
             }
         }
         else if (obj.type == 2) // Cubo
-{
-    const float EPS = 1e-5;
-
-    // Transformar para posicao global
-    float3 O = mul(obj.invMatWorld, float4(rayOrigin, 1)).xyz;
-    float3 D = normalize(mul(obj.invMatWorld, float4(rayDir, 0)).xyz);
-
-    float3 boxMin = obj.min;
-    float3 boxMax = obj.max;
-
-    float3 t0 = (boxMin - O) / D;
-    float3 t1 = (boxMax - O) / D;
-
-    float3 tmin3 = min(t0, t1);
-    float3 tmax3 = max(t0, t1);
-
-    float tNear = max(max(tmin3.x, tmin3.y), tmin3.z);
-    float tFar  = min(min(tmax3.x, tmax3.y), tmax3.z);
-
-    if (tNear < tFar && tFar > 0)
-    {
-        float tHit = (tNear > 0) ? tNear : tFar;
-
-        if (tHit < tMin)
         {
-            float3 localPoint = O + tHit * D;
-            float3 n;
+            const float EPS = 1e-5;
 
-            // Determina a normal com base em qual tmin/tmax foi usado
-            if (tHit == t0.x) n = float3(-1,0,0);
-            else if (tHit == t1.x) n = float3(1,0,0);
-            else if (tHit == t0.y) n = float3(0,-1,0);
-            else if (tHit == t1.y) n = float3(0,1,0);
-            else if (tHit == t0.z) n = float3(0,0,-1);
-            else n = float3(0,0,1);
+            // Transformar para posicao global
+            float3 O = mul(obj.invMatWorld, float4(rayOrigin, 1)).xyz;
+            float3 D = normalize(mul(obj.invMatWorld, float4(rayDir, 0)).xyz);
 
-            // Converte ponto local para espaço mundo para definir tMin corretamente
-            float3 worldPoint = mul(obj.matWorld, float4(localPoint,1)).xyz;
+            float3 boxMin = obj.min;
+            float3 boxMax = obj.max;
 
-            hitIndex = i;
-            tMin = length(worldPoint - rayOrigin);
+            float3 t0 = (boxMin - O) / D;
+            float3 t1 = (boxMax - O) / D;
 
-            hitNormal = normalize(mul(obj.invTranspMatWorld, float4(n,0)).xyz);
+            float3 tmin3 = min(t0, t1);
+            float3 tmax3 = max(t0, t1);
+
+            float tNear = max(max(tmin3.x, tmin3.y), tmin3.z);
+            float tFar  = min(min(tmax3.x, tmax3.y), tmax3.z);
+
+            if (tNear < tFar && tFar > 0)
+            {
+                float tHit = (tNear > 0) ? tNear : tFar;
+
+                if (tHit < tMin)
+                {
+                    float3 localPoint = O + tHit * D;
+                    float3 n;
+
+                    // Determina a normal com base em qual tmin/tmax foi usado
+                    if (tHit == t0.x) n = float3(-1,0,0);
+                    else if (tHit == t1.x) n = float3(1,0,0);
+                    else if (tHit == t0.y) n = float3(0,-1,0);
+                    else if (tHit == t1.y) n = float3(0,1,0);
+                    else if (tHit == t0.z) n = float3(0,0,-1);
+                    else n = float3(0,0,1);
+
+                    // Converte ponto local para espaço mundo para definir tMin corretamente
+                    float3 worldPoint = mul(obj.matWorld, float4(localPoint,1)).xyz;
+
+                    hitIndex = i;
+                    tMin = length(worldPoint - rayOrigin);
+
+                    hitNormal = normalize(mul(obj.invTranspMatWorld, float4(n,0)).xyz);
+                }
+            }
         }
-    }
-}
 
     }
 

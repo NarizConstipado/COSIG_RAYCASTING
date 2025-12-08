@@ -15,6 +15,25 @@ public class GPUPrimaryRays : MonoBehaviour
     private int width = 512;
     private int height = 512;
 
+    // BVH arrays (preenchidos por SceneBuilder antes de chamar Render)
+    public Vector3[] bvhNodeMins;
+    public Vector3[] bvhNodeMaxs;
+    public int[] bvhNodeLeft;
+    public int[] bvhNodeRight;
+    public int[] bvhNodeFirstPrim;
+    public int[] bvhNodePrimCount;
+
+    // prim arrays
+    public Vector3[] primMin;
+    public Vector3[] primMax;
+    public int[] primType;
+    public int[] primObjIndex;
+
+    public Vector3[] primTriV0;
+    public Vector3[] primTriV1;
+    public Vector3[] primTriV2;
+    public Vector4[] primSphereCenterRadius;
+
     public void Render(ImageSettings imgSettings)
     {
         if (imgSettings != null)
@@ -40,6 +59,7 @@ public class GPUPrimaryRays : MonoBehaviour
 
         int kernel = rayShader.FindKernel("CSMain");
 
+        // Objetos / materiais / luzes
         ComputeBuffer objBuffer = new ComputeBuffer(gpuObjects.Length, System.Runtime.InteropServices.Marshal.SizeOf(typeof(GPUObject)));
         objBuffer.SetData(gpuObjects);
         rayShader.SetBuffer(kernel, "objects", objBuffer);
@@ -51,6 +71,54 @@ public class GPUPrimaryRays : MonoBehaviour
         ComputeBuffer lightBuffer = new ComputeBuffer(gpuLights.Length, System.Runtime.InteropServices.Marshal.SizeOf(typeof(GPULight)));
         lightBuffer.SetData(gpuLights);
         rayShader.SetBuffer(kernel, "lights", lightBuffer);
+
+        // BVH buffers (opcionais)
+        ComputeBuffer nodeMinBuf = null, nodeMaxBuf = null, nodeLeftBuf = null, nodeRightBuf = null, nodeFirstPrimBuf = null, nodePrimCountBuf = null;
+        ComputeBuffer primObjIndexBuf = null;
+
+        if (bvhNodeMins != null && bvhNodeMins.Length > 0)
+        {
+            nodeMinBuf = new ComputeBuffer(bvhNodeMins.Length, sizeof(float) * 3);
+            nodeMinBuf.SetData(bvhNodeMins);
+            rayShader.SetBuffer(kernel, "bvhNodeMins", nodeMinBuf);
+
+            nodeMaxBuf = new ComputeBuffer(bvhNodeMaxs.Length, sizeof(float) * 3);
+            nodeMaxBuf.SetData(bvhNodeMaxs);
+            rayShader.SetBuffer(kernel, "bvhNodeMaxs", nodeMaxBuf);
+
+            nodeLeftBuf = new ComputeBuffer(bvhNodeLeft.Length, sizeof(int));
+            nodeLeftBuf.SetData(bvhNodeLeft);
+            rayShader.SetBuffer(kernel, "bvhNodeLeft", nodeLeftBuf);
+
+            nodeRightBuf = new ComputeBuffer(bvhNodeRight.Length, sizeof(int));
+            nodeRightBuf.SetData(bvhNodeRight);
+            rayShader.SetBuffer(kernel, "bvhNodeRight", nodeRightBuf);
+
+            nodeFirstPrimBuf = new ComputeBuffer(bvhNodeFirstPrim.Length, sizeof(int));
+            nodeFirstPrimBuf.SetData(bvhNodeFirstPrim);
+            rayShader.SetBuffer(kernel, "bvhNodeFirstPrim", nodeFirstPrimBuf);
+
+            nodePrimCountBuf = new ComputeBuffer(bvhNodePrimCount.Length, sizeof(int));
+            nodePrimCountBuf.SetData(bvhNodePrimCount);
+            rayShader.SetBuffer(kernel, "bvhNodePrimCount", nodePrimCountBuf);
+
+            // prim -> obj index
+            if (primObjIndex != null && primObjIndex.Length > 0)
+            {
+                primObjIndexBuf = new ComputeBuffer(primObjIndex.Length, sizeof(int));
+                primObjIndexBuf.SetData(primObjIndex);
+                rayShader.SetBuffer(kernel, "primObjIndex", primObjIndexBuf);
+            }
+
+            // passar contagens ao shader
+            rayShader.SetInt("bvhNodeCount", bvhNodeMins.Length);
+            rayShader.SetInt("primCount", primObjIndex != null ? primObjIndex.Length : 0);
+        }
+        else
+        {
+            rayShader.SetInt("bvhNodeCount", 0);
+            rayShader.SetInt("primCount", 0);
+        }
 
         rayShader.SetTexture(kernel, "Result", outputTexture);
 
@@ -66,9 +134,18 @@ public class GPUPrimaryRays : MonoBehaviour
         int threadY = Mathf.CeilToInt(height / 8f);
         rayShader.Dispatch(kernel, threadX, threadY, 1);
 
+        // Limpeza buffers
         objBuffer.Dispose();
         matBuffer.Dispose();
         lightBuffer.Dispose();
+
+        nodeMinBuf?.Dispose();
+        nodeMaxBuf?.Dispose();
+        nodeLeftBuf?.Dispose();
+        nodeRightBuf?.Dispose();
+        nodeFirstPrimBuf?.Dispose();
+        nodePrimCountBuf?.Dispose();
+        primObjIndexBuf?.Dispose();
 
         SaveRenderTextureToPNG(outputTexture, Application.dataPath + "/RayTraceOutput_gpu.png");
 

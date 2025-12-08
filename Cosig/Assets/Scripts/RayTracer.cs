@@ -142,8 +142,6 @@ public class PrimaryRays
                 {
                     finalColor += light.color * hit.material.color * hit.material.diffuse * cosTheta;
                 }
-
-
             }
         }
 

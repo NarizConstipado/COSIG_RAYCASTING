@@ -20,6 +20,9 @@ public class SceneBuilder : MonoBehaviour
 
     public RawImage outputImage;
 
+    // Guardar o BVHBuilder como campo para poder empacotar para GPU mais tarde
+    private BVHBuilder bvhBuilder;
+
     void Start()
     {
         string resourceName = null;// "Config/Test Scene 1";
@@ -155,7 +158,7 @@ public class SceneBuilder : MonoBehaviour
                         new Vector2(1, 1)
                 };
 
-                
+
                 int[] triangles = new int[] {0, 1, 2};
                 Vector3 normal = Vector3.Cross(triData.v2 - triData.v1, triData.v3 - triData.v1).normalized;
                 Vector3[] normals = new Vector3[] {normal, normal, normal};
@@ -195,7 +198,7 @@ public class SceneBuilder : MonoBehaviour
             {
                 ApplyTransformation(obj, transformations[tIndex]);
             }
-            
+
             // Identifica e aplica material
             int mIndex = objData switch
             {
@@ -233,6 +236,9 @@ public class SceneBuilder : MonoBehaviour
         bvh.GatherPrimitives(sceneObjects, transformations);
         bvh.BuildRecursive();
 
+        // guardar BVHBuilder para enviar ao GPU
+        this.bvhBuilder = bvh;
+
         // Debugger para visualizar a BVH na cena
         var viewerGO = new GameObject("BVH Debug Viewer");
         var viewer = viewerGO.AddComponent<DebugBVHViewer>();
@@ -248,7 +254,7 @@ public class SceneBuilder : MonoBehaviour
         obj.transform.Rotate(transformation.rotation);
         obj.transform.localScale = transformation.scale;
     }
-    
+
     void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
         Material newMaterial = new Material(baseMaterial);
@@ -383,7 +389,37 @@ public class SceneBuilder : MonoBehaviour
         gpuRayTracer.gpuMaterials = gpuMaterials;
         gpuRayTracer.gpuLights = gpuLights;
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         gpuRayTracer.Render(imgSettings);
+        sw.Stop();
+        Debug.Log("Compute time without: " + sw.ElapsedMilliseconds + " ms");
+
+        // Pack BVH and set arrays on gpuRayTracer
+        if (bvhBuilder != null)
+        {
+            bvhBuilder.PackForGPU(
+                out Vector3[] nodeMins, out Vector3[] nodeMaxs, out int[] nodeLeft, out int[] nodeRight, out int[] nodeFirstPrim, out int[] nodePrimCount,
+                out Vector3[] outPrimMin, out Vector3[] outPrimMax, out int[] outPrimType, out int[] outPrimObjIndex,
+                out Vector3[] outTriV0, out Vector3[] outTriV1, out Vector3[] outTriV2, out Vector4[] outSphereCenterRadius);
+
+            gpuRayTracer.bvhNodeMins = nodeMins;
+            gpuRayTracer.bvhNodeMaxs = nodeMaxs;
+            gpuRayTracer.bvhNodeLeft = nodeLeft;
+            gpuRayTracer.bvhNodeRight = nodeRight;
+            gpuRayTracer.bvhNodeFirstPrim = nodeFirstPrim;
+            gpuRayTracer.bvhNodePrimCount = nodePrimCount;
+
+            gpuRayTracer.primObjIndex = outPrimObjIndex;
+            // primMin/primMax not required by shader traversal since shader will look up object via primObjIndex,
+            // mas deixo-os disponíveis caso queira expandir.
+            gpuRayTracer.primMin = outPrimMin;
+            gpuRayTracer.primMax = outPrimMax;
+        }
+
+        sw = System.Diagnostics.Stopwatch.StartNew();
+        gpuRayTracer.Render(imgSettings);
+        sw.Stop();
+        Debug.Log("Compute time with: " + sw.ElapsedMilliseconds + " ms");
 
         if (outputImage != null)
             outputImage.texture = gpuRayTracer.outputTexture;
