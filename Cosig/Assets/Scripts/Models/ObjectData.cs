@@ -104,11 +104,11 @@ namespace Models
 
         public void Intersect(Ray rayWorld, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
         {
-            const float EPS = 1e-6f;
+            const float epsilon = 1e-6f;
             Transformation T = transformations[transformationIndex];
             MaterialProperties mat = materials[materialIndex];
 
-            // Transformar o raio para o espaço local
+            //Raio no espaço local
             Matrix4x4 Tinv = T.GetInverseMatrix();
             Vector3 ro = Tinv.MultiplyPoint(rayWorld.origin);
             Vector3 rd = Tinv.MultiplyVector(rayWorld.direction).normalized;
@@ -119,19 +119,19 @@ namespace Models
             Vector3 pvec = Vector3.Cross(rd, e2);
             float det = Vector3.Dot(e1, pvec);
 
-            if (Mathf.Abs(det) < EPS) return; // Raio paralelo ao triângulo
+            if (Mathf.Abs(det) < epsilon) return;
 
             float invDet = 1f / det;
             Vector3 tvec = ro - v1;
             float u = Vector3.Dot(tvec, pvec) * invDet;
-            if (u < -EPS || u > 1f + EPS) return;
+            if (u < -epsilon || u > 1f + epsilon) return;
 
             Vector3 qvec = Vector3.Cross(tvec, e1);
             float v = Vector3.Dot(rd, qvec) * invDet;
-            if (v < -EPS || u + v > 1f + EPS) return;
+            if (v < -epsilon || u + v > 1f + epsilon) return;
 
             float tLocal = Vector3.Dot(e2, qvec) * invDet;
-            if (tLocal <= EPS) return;
+            if (tLocal <= epsilon) return;
 
             // Ponto e normal no espaço local
             Vector3 pLocal = ro + tLocal * rd;
@@ -159,9 +159,6 @@ namespace Models
         public int transformationIndex;
         public int materialIndex;
 
-        private Vector3 localCenter = Vector3.zero;
-        private float localRadius = 0.5f;
-
         public SphereData(int tIndex, int mIndex)
         {
             transformationIndex = tIndex;
@@ -170,9 +167,8 @@ namespace Models
 
         public void Intersect(Ray rayWorld, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
         {
-            const float EPS = 1e-6f;
+            const float epsilon = 1e-6f;
 
-            // Segurança: valida index
             if (transformationIndex < 0 || transformationIndex >= transformations.Count)
             {
                 Debug.LogWarning("Sphere has invalid transformationIndex: " + transformationIndex);
@@ -181,23 +177,20 @@ namespace Models
 
             Transformation T = transformations[transformationIndex];
 
-            // Matriz inversa para trazer o raio para o espaço local do objecto
+            // Raio no espaço local
             Matrix4x4 Tinv = T.GetInverseMatrix();
-
-            // Transformar origem e direcção (direcção sem translação)
             Vector3 localOrigin = Tinv.MultiplyPoint(rayWorld.origin);
-            Vector3 localDir = Tinv.MultiplyVector(rayWorld.direction); // NÃO normalizamos ainda
+            Vector3 localDir = Tinv.MultiplyVector(rayWorld.direction);
 
-            // IMPORTANTE: normalizar depois da transformação — se o transform contém escala, normalizar aqui é OK
             localDir.Normalize();
 
             Ray localRay = new Ray(localOrigin, localDir);
 
-            // Parametros da esfera no espaço local (sphere unitária centrada na origem com raio 0.5)
+            // Parametros da esfera no espaço local
             Vector3 localCenter = Vector3.zero;
             float localRadius = 0.5f;
 
-            // Interseção clássico: a*t^2 + b*t + c = 0
+            //a*t^2 + b*t + c = 0
             Vector3 L = localRay.origin - localCenter;
             float a = Vector3.Dot(localRay.direction, localRay.direction);
             float b = 2f * Vector3.Dot(localRay.direction, L);
@@ -210,8 +203,8 @@ namespace Models
             float t0 = (-b - sqrtD) / (2f * a);
             float t1 = (-b + sqrtD) / (2f * a);
 
-            // escolher o primeiro t positivo maior que EPS
-            float tLocal = (t0 > EPS) ? t0 : ((t1 > EPS) ? t1 : -1f);
+            // escolher o primeiro t positivo maior que epsilon
+            float tLocal = (t0 > epsilon) ? t0 : ((t1 > epsilon) ? t1 : -1f);
             if (tLocal < 0f) return;
 
             // Ponto e normal no espaço local
@@ -226,7 +219,7 @@ namespace Models
             float tWorld = (worldPoint - rayWorld.origin).magnitude;
 
             // Atualiza hit se for mais perto
-            if (tWorld > EPS && tWorld < hit.tmin)
+            if (tWorld > epsilon && tWorld < hit.tmin)
             {
                 hit.found = true;
                 hit.tmin = tWorld;
@@ -253,13 +246,13 @@ namespace Models
 
         public void Intersect(Ray ray, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
         {
-            const float EPS = 1e-6f;
+            const float epsilon = 1e-6f;
             Transformation T = transformations[transformationIndex];
-
+            
+            //Raio no espaço local
             Matrix4x4 Tinv = T.GetInverseMatrix();
-            // Ray no espaço local
-            Vector3 localOrigin = T.GetInverseMatrix().MultiplyPoint(ray.origin);
-            Vector3 localDir    = T.GetInverseMatrix().MultiplyVector(ray.direction).normalized;
+            Vector3 localOrigin = Tinv.MultiplyPoint(ray.origin);
+            Vector3 localDir    = Tinv.MultiplyVector(ray.direction).normalized;
             Ray localRay = new Ray(localOrigin, localDir);
 
             float tnear = float.NegativeInfinity;
@@ -273,7 +266,7 @@ namespace Models
                 float minVal = min[i];
                 float maxVal = max[i];
 
-                if (Mathf.Abs(dir) < EPS)
+                if (Mathf.Abs(dir) < epsilon)
                 {
                     // Raio paralelo aos planos
                     if (origin < minVal || origin > maxVal)
@@ -301,14 +294,14 @@ namespace Models
 
             for (int i = 0; i < 3; i++)
             {
-                if (Mathf.Abs(localP[i] - max[i]) < EPS) { worldNormal[i] = 1f; break; }
-                if (Mathf.Abs(localP[i] - min[i]) < EPS) { worldNormal[i] = -1f; break; }
+                if (Mathf.Abs(localP[i] - max[i]) < epsilon) { worldNormal[i] = 1f; break; }
+                if (Mathf.Abs(localP[i] - min[i]) < epsilon) { worldNormal[i] = -1f; break; }
             }
 
             worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(worldNormal).normalized;
 
             float tWorld = (worldPoint - ray.origin).magnitude;
-            if (tWorld > EPS && tWorld < hit.tmin)
+            if (tWorld > epsilon && tWorld < hit.tmin)
             {
                 hit.found = true;
                 hit.tmin = tWorld;

@@ -11,6 +11,8 @@ public class PrimaryRays
     private List<MaterialProperties> materials;
     private ImageSettings imageSettings;
     private CameraData camera;
+
+    private const float epsilon = 1e-4f;
     
 
     public PrimaryRays(List<ObjectData> objs, List<LightData> lgts, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
@@ -25,7 +27,7 @@ public class PrimaryRays
 
     public Texture2D Render()
     {
-        int rec = 3; 
+        int rec = 2; 
 
         int Hres = imageSettings.size.x;
         int Vres = imageSettings.size.y;
@@ -33,7 +35,6 @@ public class PrimaryRays
         Texture2D tex = new Texture2D(Hres, Vres);
         tex.filterMode = FilterMode.Point;
 
-        // Posição da câmera
         Vector3 origin = new Vector3(0f, 0f, camera.distance);
 
         // Converter FOV
@@ -109,7 +110,7 @@ public class PrimaryRays
 
             finalColor += light.color * hit.material.color * hit.material.ambient;
 
-            Vector3 L = (lightPos - hit.point);
+            Vector3 L = lightPos - hit.point;
             float tLight = L.magnitude;
             L.Normalize();
 
@@ -117,7 +118,6 @@ public class PrimaryRays
 
             if (cosTheta > 0f)
             {
-                const float epsilon = 0.0001f;
                 Vector3 shadowOrigin = hit.point + hit.normal * epsilon;
 
                 Ray shadowRay = new Ray(shadowOrigin, L);
@@ -145,8 +145,54 @@ public class PrimaryRays
             }
         }
 
-        finalColor /= lights.Count;
+        if (rec > 0)
+        {
+            float cosThetaV = -Vector3.Dot(ray.direction, hit.normal);
 
-        return finalColor;
+            if (hit.material.specular > 0f)
+            {
+                if (cosThetaV > 0f)
+                {
+                    Vector3 r = ray.direction + 2f * cosThetaV * hit.normal;
+                    r.Normalize();
+
+                    Ray reflectedRay = new Ray(hit.point + epsilon * r, r);
+
+                    finalColor += hit.material.color * hit.material.specular * traceRay(reflectedRay, rec - 1);
+                }
+            }
+
+            if(hit.material.refraction > 0f)
+            {
+                Vector3 N = hit.normal;
+                float eta;
+
+                if (cosThetaV > 0f)
+                {
+                    eta = 1.0f / hit.material.refractionIndex;
+                }
+                else
+                {
+                    eta = hit.material.refractionIndex;
+                    N = -N;
+                    cosThetaV = -cosThetaV;
+                }
+
+                float k = 1.0f - eta * eta * (1.0f - cosThetaV * cosThetaV);
+                if (k >= 0f)
+                {
+                    float cosThetaR = Mathf.Sqrt(k);
+
+                    Vector3 refractDir = eta * ray.direction + (eta * cosThetaV - cosThetaR) * N;
+                    refractDir.Normalize();
+
+                    Ray refractedRay = new Ray(hit.point - N * epsilon, refractDir);
+
+                    finalColor += hit.material.color * hit.material.refraction * traceRay(refractedRay, rec - 1);
+                }
+            }
+        }
+
+        return finalColor /= lights.Count;
     }
 }
