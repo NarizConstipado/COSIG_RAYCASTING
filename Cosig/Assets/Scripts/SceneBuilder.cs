@@ -349,7 +349,9 @@ public class SceneBuilder : MonoBehaviour
                 color = new Vector3(m.color.r, m.color.g, m.color.b),
                 ambient = m.ambient,
                 diffuse = m.diffuse,
-                specular = m.specular
+                specular = m.specular,
+                refraction = m.refraction,
+                refractionIndex = m.refractionIndex
             };
         }
         return gpuMaterials;
