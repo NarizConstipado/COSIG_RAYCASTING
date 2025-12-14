@@ -36,8 +36,6 @@ namespace Models
         public float ambient;
         public float diffuse;
         public float specular;
-        public float refraction;
-        public float refractionIndex;
     }
 
     public struct GPULight
