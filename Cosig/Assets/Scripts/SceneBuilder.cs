@@ -122,7 +122,7 @@ public class SceneBuilder : MonoBehaviour
 
         BuildScene();
     }
-    // Method para criar cada objeto na cena
+ 
     void BuildScene()
     {
         ImageSettings img = null;
@@ -214,22 +214,20 @@ public class SceneBuilder : MonoBehaviour
         }
         foreach(var lightData in lights)
         {
-            GameObject obj = null;
             var lightObj = new GameObject("Light");
             var light = lightObj.AddComponent<Light>();
             light.color = lightData.color;
-            obj = lightObj;
             ApplyTransformation(lightObj, transformations[lightData.transformationIndex]);
         }
 
         // --- Render CPU ---
-        //PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
+        PrimaryRays tracer = new PrimaryRays(sceneObjects, lights, transformations, materials, img, cam);
 
-        //Texture2D tex = tracer.Render();
+        Texture2D tex = tracer.Render();
 
-        //outputImage.texture = tex;
-        //byte[] png = tex.EncodeToPNG();
-        //System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
+        outputImage.texture = tex;
+        byte[] png = tex.EncodeToPNG();
+        System.IO.File.WriteAllBytes(Application.dataPath + "/RayTraceOutput.png", png);
 
         // --- Build BVH ---
         BVHBuilder bvh = new BVHBuilder();
@@ -244,7 +242,7 @@ public class SceneBuilder : MonoBehaviour
         var viewer = viewerGO.AddComponent<DebugBVHViewer>();
         viewer.bvh = bvh;
 
-        RenderGPU(img);
+        //RenderGPU(img);
     }
 
     void ApplyTransformation(GameObject obj, Transformation transformation)
@@ -259,15 +257,6 @@ public class SceneBuilder : MonoBehaviour
     {
         Material newMaterial = new Material(baseMaterial);
         newMaterial.color = properties.color;
-
-        //newMaterial.SetFloat("_Metallic", (float)properties.specular);
-        //newMaterial.SetFloat("_Glossiness", (float)properties.diffuse);
-
-        newMaterial.SetFloat("_Ambient", properties.ambient);
-        newMaterial.SetFloat("_Diffuse", properties.diffuse);
-        newMaterial.SetFloat("_Specular", properties.specular);
-        newMaterial.SetFloat("_Refract", properties.refraction);
-        newMaterial.SetFloat("_RefractIndex", properties.refractionIndex);
 
         var renderer = obj.GetComponent<Renderer>();
         if (renderer != null) renderer.material = newMaterial;
