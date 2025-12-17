@@ -1,6 +1,7 @@
-using UnityEngine;
-using System.Collections.Generic;
 using Models;
+using System.Collections.Generic;
+using UnityEditor.TerrainTools;
+using UnityEngine;
 
 public class PrimaryRays
 {
@@ -35,16 +36,14 @@ public class PrimaryRays
         Texture2D tex = new Texture2D(Hres, Vres);
         tex.filterMode = FilterMode.Point;
 
-        Vector3 origin = new Vector3(0f, 0f, camera.distance);
+        Vector3 origin = transformations[camera.transformationIndex].translation;
+        origin.z += camera.distance;
 
-        // Converter FOV
         float fovRad = camera.fov * Mathf.PI / 180f;
 
-        // Calcular o tamanho do plano de projeÃ§Ã£o
         float height = 2f * camera.distance * Mathf.Tan(fovRad / 2f);
         float width = height * Hres / (float)Vres;
 
-        // Tamanho do pixel
         float s = height / Vres;
 
         for (int j = 0; j < Vres; j++)
@@ -64,7 +63,6 @@ public class PrimaryRays
 
                 Color color = traceRay(ray, rec);
 
-                // Clamp
                 color.r = Mathf.Clamp01(color.r);
                 color.g = Mathf.Clamp01(color.g);
                 color.b = Mathf.Clamp01(color.b);
@@ -96,9 +94,9 @@ public class PrimaryRays
 
         foreach (var obj in objects)
         {
-            if (obj is SphereData sphere) sphere.Intersect(ray, transformations, materials, ref hit);
-            else if (obj is BoxData box) box.Intersect(ray, transformations, materials, ref hit);
-            else if (obj is TrianglePrimitive tri) tri.Intersect(ray, transformations, materials, ref hit);
+            if (obj is SphereData sphere) IntersectSphere(sphere, ray, ref hit);
+            else if (obj is BoxData box) IntersectBox(box, ray, ref hit);
+            else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, ray, ref hit);
         }
 
         if (!hit.found) return finalColor;
@@ -130,9 +128,9 @@ public class PrimaryRays
 
                 foreach (var obj in objects)
                 {
-                    if (obj is SphereData sphere) sphere.Intersect(shadowRay, transformations, materials, ref shadowHit);
-                    else if (obj is BoxData box) box.Intersect(shadowRay, transformations, materials, ref shadowHit);
-                    else if (obj is TrianglePrimitive tri) tri.Intersect(shadowRay, transformations, materials, ref shadowHit);
+                    if (obj is SphereData sphere) IntersectSphere(sphere, shadowRay, ref shadowHit);
+                    else if (obj is BoxData box) IntersectBox(box, shadowRay, ref shadowHit);
+                    else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, shadowRay, ref shadowHit);
 
                     if (shadowHit.found)
                         break;
@@ -194,5 +192,184 @@ public class PrimaryRays
         }
 
         return finalColor /= lights.Count;
+    }
+
+    private void IntersectTriangle(TrianglePrimitive tri, Ray rayWorld, ref Hit hit)
+    {
+        const float epsilon = 1e-6f;
+        Transformation T = transformations[tri.transformationIndex];
+        MaterialProperties mat = materials[tri.materialIndex];
+
+        //Raio no espaço local
+        Matrix4x4 Tinv = T.GetInverseMatrix();
+        Vector3 ro = Tinv.MultiplyPoint(rayWorld.origin);
+        Vector3 rd = Tinv.MultiplyVector(rayWorld.direction).normalized;
+
+        // Möller–Trumbore
+        Vector3 e1 = tri.v2 - tri.v1;
+        Vector3 e2 = tri.v3 - tri.v1;
+        Vector3 pvec = Vector3.Cross(rd, e2);
+        float det = Vector3.Dot(e1, pvec);
+
+        if (Mathf.Abs(det) < epsilon) return;
+
+        float invDet = 1f / det;
+        Vector3 tvec = ro - tri.v1;
+        float u = Vector3.Dot(tvec, pvec) * invDet;
+        if (u < -epsilon || u > 1f + epsilon) return;
+
+        Vector3 qvec = Vector3.Cross(tvec, e1);
+        float v = Vector3.Dot(rd, qvec) * invDet;
+        if (v < -epsilon || u + v > 1f + epsilon) return;
+
+        float tLocal = Vector3.Dot(e2, qvec) * invDet;
+        if (tLocal <= epsilon) return;
+
+        // Ponto e normal no espaço local
+        Vector3 pLocal = ro + tLocal * rd;
+        Vector3 nLocal = Vector3.Cross(e1, e2).normalized;
+
+        // Converter para o espaço do mundo
+        Vector3 pWorld = T.GetMatrix().MultiplyPoint(pLocal);
+        Vector3 nWorld = T.GetInverseTransposeMatrix().MultiplyVector(nLocal).normalized;
+        float tWorld = (pWorld - rayWorld.origin).magnitude;
+
+        if (tWorld < hit.tmin)
+        {
+            hit.found = true;
+            hit.tmin = tWorld;
+            hit.point = pWorld;
+            hit.normal = nWorld;
+            hit.material = mat;
+        }
+    }
+    public void IntersectSphere(SphereData sphere, Ray rayWorld, ref Hit hit)
+    {
+        const float epsilon = 1e-6f;
+
+        if (sphere.transformationIndex < 0 || sphere.transformationIndex >= transformations.Count)
+        {
+            Debug.LogWarning("Sphere has invalid transformationIndex: " + sphere.transformationIndex);
+            return;
+        }
+
+        Transformation T = transformations[sphere.transformationIndex];
+
+        // Raio no espaço local
+        Matrix4x4 Tinv = T.GetInverseMatrix();
+        Vector3 localOrigin = Tinv.MultiplyPoint(rayWorld.origin);
+        Vector3 localDir = Tinv.MultiplyVector(rayWorld.direction);
+
+        localDir.Normalize();
+
+        Ray localRay = new Ray(localOrigin, localDir);
+
+        // Parametros da esfera no espaço local
+        Vector3 localCenter = Vector3.zero;
+        float localRadius = 0.5f;
+
+        //a*t^2 + b*t + c = 0
+        Vector3 L = localRay.origin - localCenter;
+        float a = Vector3.Dot(localRay.direction, localRay.direction);
+        float b = 2f * Vector3.Dot(localRay.direction, L);
+        float c = Vector3.Dot(L, L) - localRadius * localRadius;
+
+        float discriminant = b * b - 4f * a * c;
+        if (discriminant < 0f) return;
+
+        float sqrtD = Mathf.Sqrt(discriminant);
+        float t0 = (-b - sqrtD) / (2f * a);
+        float t1 = (-b + sqrtD) / (2f * a);
+
+        // escolher o primeiro t positivo maior que epsilon
+        float tLocal = (t0 > epsilon) ? t0 : ((t1 > epsilon) ? t1 : -1f);
+        if (tLocal < 0f) return;
+
+        // Ponto e normal no espaço local
+        Vector3 localPoint = localRay.origin + tLocal * localRay.direction;
+        Vector3 localNormal = (localPoint - localCenter).normalized;
+
+        // Converter para espaço world
+        Vector3 worldPoint = T.GetMatrix().MultiplyPoint(localPoint);
+        Vector3 worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(localNormal).normalized;
+
+        // Distância no espaço world (para comparação com hit.tmin)
+        float tWorld = (worldPoint - rayWorld.origin).magnitude;
+
+        // Atualiza hit se for mais perto
+        if (tWorld > epsilon && tWorld < hit.tmin)
+        {
+            hit.found = true;
+            hit.tmin = tWorld;
+            hit.point = worldPoint;
+            hit.normal = worldNormal;
+            hit.material = materials[sphere.materialIndex];
+        }
+    }
+    public void IntersectBox(BoxData box, Ray ray, ref Hit hit)
+    {
+        const float epsilon = 1e-6f;
+        Transformation T = transformations[box.transformationIndex];
+
+        //Raio no espaço local
+        Matrix4x4 Tinv = T.GetInverseMatrix();
+        Vector3 localOrigin = Tinv.MultiplyPoint(ray.origin);
+        Vector3 localDir = Tinv.MultiplyVector(ray.direction).normalized;
+        Ray localRay = new Ray(localOrigin, localDir);
+
+        float tnear = float.NegativeInfinity;
+        float tfar = float.PositiveInfinity;
+
+        // ver cada eixo
+        for (int i = 0; i < 3; i++)
+        {
+            float origin = localRay.origin[i];
+            float dir = localRay.direction[i];
+            float minVal = box.min[i];
+            float maxVal = box.max[i];
+
+            if (Mathf.Abs(dir) < epsilon)
+            {
+                // Raio paralelo aos planos
+                if (origin < minVal || origin > maxVal)
+                    return;
+            }
+            else
+            {
+                // Calcular interseção com os planos
+                float t1 = (minVal - origin) / dir;
+                float t2 = (maxVal - origin) / dir;
+                if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+                tnear = Mathf.Max(tnear, t1);
+                tfar = Mathf.Min(tfar, t2);
+                if (tnear > tfar || tfar < 0f)
+                    return;
+            }
+        }
+
+        Vector3 localPoint = localRay.origin + tnear * localRay.direction;
+        Vector3 worldPoint = T.GetMatrix().MultiplyPoint(localPoint);
+
+        // encontra o eixo mais próximo da face
+        Vector3 worldNormal = Vector3.zero;
+        Vector3 localP = localPoint;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (Mathf.Abs(localP[i] - box.max[i]) < epsilon) { worldNormal[i] = 1f; break; }
+            if (Mathf.Abs(localP[i] - box.min[i]) < epsilon) { worldNormal[i] = -1f; break; }
+        }
+
+        worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(worldNormal).normalized;
+
+        float tWorld = (worldPoint - ray.origin).magnitude;
+        if (tWorld > epsilon && tWorld < hit.tmin)
+        {
+            hit.found = true;
+            hit.tmin = tWorld;
+            hit.point = worldPoint;
+            hit.normal = worldNormal;
+            hit.material = materials[box.materialIndex];
+        }
     }
 }

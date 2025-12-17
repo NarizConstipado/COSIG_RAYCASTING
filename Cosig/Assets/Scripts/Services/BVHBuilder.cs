@@ -10,8 +10,8 @@ public struct BVHNode
     public Vector3 boundsMax;
     public int left;
     public int right;
-    public int firstPrim;   // índice no array de prims
-    public int primCount;   // quantos prims neste nó
+    public int firstPrim;
+    public int primCount;
 }
 
 public class BVHBuilder
@@ -28,18 +28,15 @@ public class BVHBuilder
     public List<PrimRef> prims = new List<PrimRef>();
     public List<int> primIndices = new List<int>();
 
-    // arrays auxiliares que vamos preencher para GPU (world-space)
     public List<Vector3> primMin = new List<Vector3>();
     public List<Vector3> primMax = new List<Vector3>();
     public List<int> primType = new List<int>();
     public List<int> primObjIndex = new List<int>();
 
-    // para triângulos (world-space vertices)
     public List<Vector3> primTriV0 = new List<Vector3>();
     public List<Vector3> primTriV1 = new List<Vector3>();
     public List<Vector3> primTriV2 = new List<Vector3>();
 
-    // para esferas (centro + raio no espaço world) — aproximação pela bbox com escala isotrópica
     public List<Vector4> primSphereCenterRadius = new List<Vector4>();
 
     public void GatherPrimitives(List<ObjectData> sceneObjects, List<Transformation> transformations)
@@ -158,7 +155,6 @@ public class BVHBuilder
     {
         nodes.Clear();
         if (prims.Count == 0) return;
-        // indices passed by reference
         BuildNode(0, primIndices.Count, 0);
     }
 

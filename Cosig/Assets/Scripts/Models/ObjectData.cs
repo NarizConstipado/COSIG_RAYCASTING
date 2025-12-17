@@ -8,19 +8,19 @@ namespace Models
 
     public struct GPUObject
     {
-        public int type;           // 0 = Sphere, 1 = Triangle
+        public int type;           // 0 = Esfera, 1 = Triangulo, 2 = Cubo
         public int materialIndex;
 
-        // Sphere
+        // Esfera
         public Vector3 center;
         public float radius;
 
-        // Triangle
+        // Triangulo
         public Vector3 v0;
         public Vector3 v1;
         public Vector3 v2;
 
-        // Box
+        // Cubo
         public Vector3 min;
         public Vector3 max;
 
@@ -36,6 +36,8 @@ namespace Models
         public float ambient;
         public float diffuse;
         public float specular;
+        public float refraction;
+        public float refractionIndex;
     }
 
     public struct GPULight
@@ -101,56 +103,6 @@ namespace Models
             v2 = new Vector3(v2x, v2y, v2z);
             v3 = new Vector3(v3x, v3y, v3z);
         }
-
-        public void Intersect(Ray rayWorld, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
-        {
-            const float epsilon = 1e-6f;
-            Transformation T = transformations[transformationIndex];
-            MaterialProperties mat = materials[materialIndex];
-
-            //Raio no espaço local
-            Matrix4x4 Tinv = T.GetInverseMatrix();
-            Vector3 ro = Tinv.MultiplyPoint(rayWorld.origin);
-            Vector3 rd = Tinv.MultiplyVector(rayWorld.direction).normalized;
-
-            // Möller–Trumbore
-            Vector3 e1 = v2 - v1;
-            Vector3 e2 = v3 - v1;
-            Vector3 pvec = Vector3.Cross(rd, e2);
-            float det = Vector3.Dot(e1, pvec);
-
-            if (Mathf.Abs(det) < epsilon) return;
-
-            float invDet = 1f / det;
-            Vector3 tvec = ro - v1;
-            float u = Vector3.Dot(tvec, pvec) * invDet;
-            if (u < -epsilon || u > 1f + epsilon) return;
-
-            Vector3 qvec = Vector3.Cross(tvec, e1);
-            float v = Vector3.Dot(rd, qvec) * invDet;
-            if (v < -epsilon || u + v > 1f + epsilon) return;
-
-            float tLocal = Vector3.Dot(e2, qvec) * invDet;
-            if (tLocal <= epsilon) return;
-
-            // Ponto e normal no espaço local
-            Vector3 pLocal = ro + tLocal * rd;
-            Vector3 nLocal = Vector3.Cross(e1, e2).normalized;
-
-            // Converter para o espaço do mundo
-            Vector3 pWorld = T.GetMatrix().MultiplyPoint(pLocal);
-            Vector3 nWorld = T.GetInverseTransposeMatrix().MultiplyVector(nLocal).normalized;
-            float tWorld = (pWorld - rayWorld.origin).magnitude;
-
-            if (tWorld < hit.tmin)
-            {
-                hit.found = true;
-                hit.tmin = tWorld;
-                hit.point = pWorld;
-                hit.normal = nWorld;
-                hit.material = mat;
-            }
-        }
     }
 
     [System.Serializable]
@@ -163,70 +115,6 @@ namespace Models
         {
             transformationIndex = tIndex;
             materialIndex = mIndex;
-        }
-
-        public void Intersect(Ray rayWorld, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
-        {
-            const float epsilon = 1e-6f;
-
-            if (transformationIndex < 0 || transformationIndex >= transformations.Count)
-            {
-                Debug.LogWarning("Sphere has invalid transformationIndex: " + transformationIndex);
-                return;
-            }
-
-            Transformation T = transformations[transformationIndex];
-
-            // Raio no espaço local
-            Matrix4x4 Tinv = T.GetInverseMatrix();
-            Vector3 localOrigin = Tinv.MultiplyPoint(rayWorld.origin);
-            Vector3 localDir = Tinv.MultiplyVector(rayWorld.direction);
-
-            localDir.Normalize();
-
-            Ray localRay = new Ray(localOrigin, localDir);
-
-            // Parametros da esfera no espaço local
-            Vector3 localCenter = Vector3.zero;
-            float localRadius = 0.5f;
-
-            //a*t^2 + b*t + c = 0
-            Vector3 L = localRay.origin - localCenter;
-            float a = Vector3.Dot(localRay.direction, localRay.direction);
-            float b = 2f * Vector3.Dot(localRay.direction, L);
-            float c = Vector3.Dot(L, L) - localRadius * localRadius;
-
-            float discriminant = b * b - 4f * a * c;
-            if (discriminant < 0f) return;
-
-            float sqrtD = Mathf.Sqrt(discriminant);
-            float t0 = (-b - sqrtD) / (2f * a);
-            float t1 = (-b + sqrtD) / (2f * a);
-
-            // escolher o primeiro t positivo maior que epsilon
-            float tLocal = (t0 > epsilon) ? t0 : ((t1 > epsilon) ? t1 : -1f);
-            if (tLocal < 0f) return;
-
-            // Ponto e normal no espaço local
-            Vector3 localPoint = localRay.origin + tLocal * localRay.direction;
-            Vector3 localNormal = (localPoint - localCenter).normalized;
-
-            // Converter para espaço world
-            Vector3 worldPoint = T.GetMatrix().MultiplyPoint(localPoint);
-            Vector3 worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(localNormal).normalized;
-
-            // Distância no espaço world (para comparação com hit.tmin)
-            float tWorld = (worldPoint - rayWorld.origin).magnitude;
-
-            // Atualiza hit se for mais perto
-            if (tWorld > epsilon && tWorld < hit.tmin)
-            {
-                hit.found = true;
-                hit.tmin = tWorld;
-                hit.point = worldPoint;
-                hit.normal = worldNormal;
-                hit.material = materials[materialIndex];
-            }
         }
     }
 
@@ -242,73 +130,6 @@ namespace Models
         {
             transformationIndex = tIndex;
             materialIndex = mIndex;
-        }
-
-        public void Intersect(Ray ray, List<Transformation> transformations, List<MaterialProperties> materials, ref Hit hit)
-        {
-            const float epsilon = 1e-6f;
-            Transformation T = transformations[transformationIndex];
-            
-            //Raio no espaço local
-            Matrix4x4 Tinv = T.GetInverseMatrix();
-            Vector3 localOrigin = Tinv.MultiplyPoint(ray.origin);
-            Vector3 localDir    = Tinv.MultiplyVector(ray.direction).normalized;
-            Ray localRay = new Ray(localOrigin, localDir);
-
-            float tnear = float.NegativeInfinity;
-            float tfar = float.PositiveInfinity;
-
-            // ver cada eixo
-            for (int i = 0; i < 3; i++)
-            {
-                float origin = localRay.origin[i];
-                float dir = localRay.direction[i];
-                float minVal = min[i];
-                float maxVal = max[i];
-
-                if (Mathf.Abs(dir) < epsilon)
-                {
-                    // Raio paralelo aos planos
-                    if (origin < minVal || origin > maxVal)
-                        return;
-                }
-                else
-                {
-                    // Calcular interseção com os planos
-                    float t1 = (minVal - origin) / dir;
-                    float t2 = (maxVal - origin) / dir;
-                    if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
-                    tnear = Mathf.Max(tnear, t1);
-                    tfar = Mathf.Min(tfar, t2);
-                    if (tnear > tfar || tfar < 0f)
-                    return;
-                }
-            }
-
-            Vector3 localPoint = localRay.origin + tnear * localRay.direction;
-            Vector3 worldPoint = T.GetMatrix().MultiplyPoint(localPoint);
-
-            // encontra o eixo mais próximo da face
-            Vector3 worldNormal = Vector3.zero;
-            Vector3 localP = localPoint;
-
-            for (int i = 0; i < 3; i++)
-            {
-                if (Mathf.Abs(localP[i] - max[i]) < epsilon) { worldNormal[i] = 1f; break; }
-                if (Mathf.Abs(localP[i] - min[i]) < epsilon) { worldNormal[i] = -1f; break; }
-            }
-
-            worldNormal = T.GetInverseTransposeMatrix().MultiplyVector(worldNormal).normalized;
-
-            float tWorld = (worldPoint - ray.origin).magnitude;
-            if (tWorld > epsilon && tWorld < hit.tmin)
-            {
-                hit.found = true;
-                hit.tmin = tWorld;
-                hit.point = worldPoint;
-                hit.normal = worldNormal;
-                hit.material = materials[materialIndex];
-            }
         }
     }
 

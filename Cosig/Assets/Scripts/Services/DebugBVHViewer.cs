@@ -17,7 +17,6 @@ public class DebugBVHViewer : MonoBehaviour
         {
             var p = bvh.prims[i];
 
-            // Escolhe cor
             if (p.primType == 0) Gizmos.color = colorSphere;
             else if (p.primType == 1) Gizmos.color = colorTriangle;
             else if (p.primType == 2) Gizmos.color = colorBox;
@@ -37,7 +36,6 @@ public class DebugBVHViewer : MonoBehaviour
         Vector3 p110 = new Vector3(max.x, max.y, min.z);
         Vector3 p111 = new Vector3(max.x, max.y, max.z);
 
-        // 12 linhas da box
         Gizmos.DrawLine(p000, p001);
         Gizmos.DrawLine(p001, p011);
         Gizmos.DrawLine(p011, p010);

@@ -23,6 +23,8 @@ struct GPUMaterial
     float ambient;
     float diffuse;
     float specular;
+    float refraction;
+    float refractionIndex;
 };
 
 struct GPULight
@@ -31,11 +33,26 @@ struct GPULight
     float3 color;
 };
 
+struct HitResult
+{
+    bool found;
+    float tmin;
+    float3 pointTransform;
+    float3 normal;
+    GPUMaterial material;
+};
+
 StructuredBuffer<GPUObject> objects;
 StructuredBuffer<GPUMaterial> materials;
 StructuredBuffer<GPULight> lights;
 
 RWTexture2D<float4> Result;
+
+cbuffer SettingsBuffer
+{
+    int recursionDepth;
+    float3 bgColor;
+};
 
 cbuffer CameraBuffer
 {
@@ -48,254 +65,331 @@ cbuffer CameraBuffer
     int height;
 };
 
-[numthreads(8,8,1)]
-void CSMain (uint3 id : SV_DispatchThreadID)
+static const float EPSILON = 1e-4f;
+static const float EPSILON_RAY = 1e-6f;
+static const float MAX_DISTANCE = 1e20f;
+
+HitResult IntersectSphere(float3 rayOrigin, float3 rayDir, GPUObject obj, int matIndex)
 {
-    if (id.x >= (uint)width || id.y >= (uint)height) return;
+    HitResult result = (HitResult)0;
+    result.found = false;
+    result.tmin = MAX_DISTANCE;
 
-    float u = (id.x + 0.5f)/width * 2 - 1;
-    float v = (id.y + 0.5f)/height * 2 - 1;
+    float3 O = mul(obj.invMatWorld, float4(rayOrigin, 1.0f)).xyz;
+    float3 D = normalize(mul(obj.invMatWorld, float4(rayDir, 0.0f)).xyz);
 
-    float aspect = (float)width / (float)height;
-    float3 rayDir = normalize(camForward + u * aspect * camRight * tan(fov*0.5) + v * camUp * tan(fov*0.5));
-    float3 rayOrigin = camPos;
+    // Esfera unitária no espaço local
+    float3 L = O;
+    float a = dot(D, D);
+    float b = 2.0f * dot(D, L);
+    float c = dot(L, L) - 0.25f; // raio = 0.5
 
-    float3 finalColor = float3(0,0,0);
+    float disc = b * b - 4.0f * a * c;
+    if (disc < 0.0f)
+        return result;
 
-    float tMin = 1e20;
-    int hitIndex = -1;
-    float3 hitNormal;
+    float sqrtDisc = sqrt(disc);
+    float t0 = (-b - sqrtDisc) / (2.0f * a);
+    float t1 = (-b + sqrtDisc) / (2.0f * a);
 
-    // Intersecao de raio e objeto
+    float tLocal = (t0 > EPSILON_RAY) ? t0 : ((t1 > EPSILON_RAY) ? t1 : -1.0f);
+    if (tLocal < 0.0f)
+        return result;
+
+    float3 localPoint = O + tLocal * D;
+    float3 worldPoint = mul(obj.matWorld, float4(localPoint, 1.0f)).xyz;
+    float tWorld = length(worldPoint - rayOrigin);
+
+    if (tWorld > EPSILON_RAY && tWorld < result.tmin)
+    {
+        result.found = true;
+        result.tmin = tWorld;
+        result.pointTransform = worldPoint;
+
+        float3 localNormal = normalize(localPoint);
+        result.normal = normalize(
+            mul(obj.invTranspMatWorld, float4(localNormal, 0.0f)).xyz
+        );
+
+        result.material = materials[matIndex];
+    }
+
+    return result;
+}
+
+HitResult IntersectTriangle(float3 rayOrigin, float3 rayDir, GPUObject obj, int matIndex)
+{
+    HitResult result = (HitResult)0;
+    result.found = false;
+    result.tmin = MAX_DISTANCE;
+
+    float3 e1 = obj.v1 - obj.v0;
+    float3 e2 = obj.v2 - obj.v0;
+    float3 pvec = cross(rayDir, e2);
+    float det = dot(e1, pvec);
+
+    if (abs(det) < EPSILON_RAY)
+        return result;
+
+    float invDet = 1.0f / det;
+    float3 tvec = rayOrigin - obj.v0;
+    float u = dot(tvec, pvec) * invDet;
+
+    if (u < 0.0f || u > 1.0f)
+        return result;
+
+    float3 qvec = cross(tvec, e1);
+    float v = dot(rayDir, qvec) * invDet;
+
+    if (v < 0.0f || u + v > 1.0f)
+        return result;
+
+    float t = dot(e2, qvec) * invDet;
+
+    if (t > EPSILON_RAY && t < result.tmin)
+    {
+        float3 hitPoint = rayOrigin + t * rayDir;
+        result.found = true;
+        result.tmin = t;
+        result.pointTransform = hitPoint;
+        result.normal = normalize(cross(e1, e2));
+        result.material = materials[matIndex];
+    }
+
+    return result;
+}
+
+HitResult IntersectBox(float3 rayOrigin, float3 rayDir, GPUObject obj, int matIndex)
+{
+    HitResult result = (HitResult)0;
+    result.found = false;
+    result.tmin = MAX_DISTANCE;
+
+    float3 O = mul(obj.invMatWorld, float4(rayOrigin, 1.0f)).xyz;
+    float3 D = normalize(mul(obj.invMatWorld, float4(rayDir, 0.0f)).xyz);
+
+    float3 boxMin = obj.min;
+    float3 boxMax = obj.max;
+
+    float tnear = -MAX_DISTANCE;
+    float tfar = MAX_DISTANCE;
+
+    for (int i = 0; i < 3; i++)
+    {
+        float origin = O[i];
+        float dir = D[i];
+        float minVal = boxMin[i];
+        float maxVal = boxMax[i];
+
+        if (abs(dir) < EPSILON_RAY)
+        {
+            if (origin < minVal || origin > maxVal)
+                return result;
+        }
+        else
+        {
+            float t1 = (minVal - origin) / dir;
+            float t2 = (maxVal - origin) / dir;
+            
+            if (t1 > t2)
+            {
+                float tmp = t1;
+                t1 = t2;
+                t2 = tmp;
+            }
+
+            tnear = max(tnear, t1);
+            tfar = min(tfar, t2);
+
+            if (tnear > tfar || tfar < 0.0f)
+                return result;
+        }
+    }
+
+    if (tnear > EPSILON_RAY)
+    {
+        float3 localPoint = O + tnear * D;
+        float3 worldPoint = mul(obj.matWorld, float4(localPoint, 1.0f)).xyz;
+        float tWorld = length(worldPoint - rayOrigin);
+
+        if (tWorld > EPSILON_RAY && tWorld < result.tmin)
+        {
+            float3 n = float3(0, 0, 0);
+            float epsilon = 1e-4f;
+
+            if (abs(localPoint.x - boxMin.x) < epsilon) n = float3(-1, 0, 0);
+            else if (abs(localPoint.x - boxMax.x) < epsilon) n = float3(1, 0, 0);
+            else if (abs(localPoint.y - boxMin.y) < epsilon) n = float3(0, -1, 0);
+            else if (abs(localPoint.y - boxMax.y) < epsilon) n = float3(0, 1, 0);
+            else if (abs(localPoint.z - boxMin.z) < epsilon) n = float3(0, 0, -1);
+            else n = float3(0, 0, 1);
+
+            result.found = true;
+            result.tmin = tWorld;
+            result.pointTransform = worldPoint;
+            result.normal = normalize(mul(obj.invTranspMatWorld, float4(n, 0.0f)).xyz);
+            result.material = materials[matIndex];
+        }
+    }
+
+    return result;
+}
+
+bool IsInShadow(float3 hitPoint, float3 hitNormal, float3 lightDir, float lightDist)
+{
+    float3 shadowOrigin = hitPoint + hitNormal * EPSILON;
+    
     for (int i = 0; i < (int)objects.Length; i++)
     {
         GPUObject obj = objects[i];
+        HitResult shadowHit = (HitResult)0;
 
         if (obj.type == 0) // Esfera
-        {
-            float3 L = rayOrigin - obj.center;
-            float a = dot(rayDir, rayDir);
-            float b = 2*dot(rayDir, L);
-            float c = dot(L,L) - obj.radius*obj.radius;
-            float disc = b*b - 4*a*c;
-            if (disc < 0) continue;
-
-            float t0 = (-b - sqrt(disc)) / (2*a);
-            float t1 = (-b + sqrt(disc)) / (2*a);
-            float t = (t0>0)? t0 : ((t1>0)? t1 : -1);
-            if (t>0 && t<tMin)
-            {
-                tMin = t;
-                hitIndex = i;
-                float3 p = rayOrigin + t*rayDir;
-                hitNormal = normalize(p - obj.center);
-            }
-        }
-        else if (obj.type == 1) // Trianglo
-        {
-            float3 e1 = obj.v1 - obj.v0;
-            float3 e2 = obj.v2 - obj.v0;
-            float3 pvec = cross(rayDir, e2);
-            float det = dot(e1, pvec);
-            if (abs(det) < 1e-6) continue;
-            float invDet = 1.0/det;
-            float3 tvec = rayOrigin - obj.v0;
-            float uu = dot(tvec, pvec)*invDet;
-            if (uu < 0 || uu > 1) continue;
-            float3 qvec = cross(tvec, e1);
-            float vv = dot(rayDir, qvec)*invDet;
-            if (vv < 0 || uu+vv >1) continue;
-            float t = dot(e2, qvec)*invDet;
-            if (t>0 && t<tMin)
-            {
-                tMin = t;
-                hitIndex = i;
-                hitNormal = normalize(cross(e1,e2));
-            }
-        }
+            shadowHit = IntersectSphere(shadowOrigin, lightDir, obj, obj.materialIndex);
+        else if (obj.type == 1) // Triangulo
+            shadowHit = IntersectTriangle(shadowOrigin, lightDir, obj, obj.materialIndex);
         else if (obj.type == 2) // Cubo
-        {
-            const float EPS = 1e-5;
+            shadowHit = IntersectBox(shadowOrigin, lightDir, obj, obj.materialIndex);
 
-            // Transformar para posicao global
-            float3 O = mul(obj.invMatWorld, float4(rayOrigin, 1)).xyz;
-            float3 D = normalize(mul(obj.invMatWorld, float4(rayDir, 0)).xyz);
-
-            float3 boxMin = obj.min;
-            float3 boxMax = obj.max;
-
-            float3 t0 = (boxMin - O) / D;
-            float3 t1 = (boxMax - O) / D;
-
-            float3 tmin3 = min(t0, t1);
-            float3 tmax3 = max(t0, t1);
-
-            float tNear = max(max(tmin3.x, tmin3.y), tmin3.z);
-            float tFar  = min(min(tmax3.x, tmax3.y), tmax3.z);
-
-            if (tNear < tFar && tFar > 0)
-            {
-                float tHit = (tNear > 0) ? tNear : tFar;
-
-                if (tHit < tMin)
-                {
-                    float3 localPoint = O + tHit * D;
-                    float3 n;
-
-                    // Determina a normal com base em qual tmin/tmax foi usado
-                    if (tHit == t0.x) n = float3(-1,0,0);
-                    else if (tHit == t1.x) n = float3(1,0,0);
-                    else if (tHit == t0.y) n = float3(0,-1,0);
-                    else if (tHit == t1.y) n = float3(0,1,0);
-                    else if (tHit == t0.z) n = float3(0,0,-1);
-                    else n = float3(0,0,1);
-
-                    // Converte ponto local para espaço mundo para definir tMin corretamente
-                    float3 worldPoint = mul(obj.matWorld, float4(localPoint,1)).xyz;
-
-                    hitIndex = i;
-                    tMin = length(worldPoint - rayOrigin);
-
-                    hitNormal = normalize(mul(obj.invTranspMatWorld, float4(n,0)).xyz);
-                }
-            }
-        }
-
+        if (shadowHit.found && shadowHit.tmin < lightDist && shadowHit.tmin > 1e-4f)
+            return true;
     }
 
-    if (hitIndex >= 0)
-    {
-        GPUObject hitObj = objects[hitIndex];
-        GPUMaterial mat = materials[hitObj.materialIndex];
-        float3 hitPoint = rayOrigin + tMin*rayDir;
+    return false;
+}
 
-        finalColor = mat.color * mat.ambient;
+float3 TraceRay(float3 rayOrigin, float3 rayDir)
+{
+    float3 radiance = float3(0, 0, 0);
+    float3 throughput = float3(1, 1, 1);
+
+    for (int depth = 0; depth <= recursionDepth; depth++)
+    {
+        HitResult hit;
+        hit.found = false;
+        hit.tmin = MAX_DISTANCE;
+
+        for (int i = 0; i < (int)objects.Length; i++)
+        {
+            GPUObject obj = objects[i];
+            HitResult h;
+
+            if (obj.type == 0)
+                h = IntersectSphere(rayOrigin, rayDir, obj, obj.materialIndex);
+            else if (obj.type == 1)
+                h = IntersectTriangle(rayOrigin, rayDir, obj, obj.materialIndex);
+            else
+                h = IntersectBox(rayOrigin, rayDir, obj, obj.materialIndex);
+
+            if (h.found && h.tmin < hit.tmin)
+                hit = h;
+        }
+
+        if (!hit.found) 
+        {
+             radiance += throughput * bgColor;
+             break;
+        }
+
+        float3 localColor = hit.material.color * hit.material.ambient;
 
         for (int li = 0; li < (int)lights.Length; li++)
         {
             GPULight light = lights[li];
-            float3 L = normalize(light.position - hitPoint);
-            float lightDist = length(light.position - hitPoint);
+            float3 L = light.position - hit.pointTransform;
+            float dist = length(L);
+            L = normalize(L);
 
-            // Shadow check
-            bool inShadow = false;
-            for (int si = 0; si < (int)objects.Length; si++)
+            float NdotL = dot(hit.normal, L);
+            if (NdotL > 0 && !IsInShadow(hit.pointTransform, hit.normal, L, dist))
             {
-                if (si == hitIndex) continue;
-                GPUObject obj = objects[si];
-
-                const float EPS = 1e-6;
-
-                if (obj.type == 0) // Esfera
-                {
-                    float3 O = hitPoint + hitNormal*0.001;
-                    float3 D = L;
-                    float3 C = obj.center;
-                    float r = obj.radius;
-                    float3 Ls = O - C;
-                    float a = dot(D,D);
-                    float b = 2*dot(D,Ls);
-                    float c = dot(Ls,Ls)-r*r;
-                    float disc = b*b-4*a*c;
-                    if (disc>0)
-                    {
-                        float t0 = (-b - sqrt(disc))/(2*a);
-                        float t1 = (-b + sqrt(disc))/(2*a);
-                        float t = (t0>0)?t0:((t1>0)?t1:-1);
-                        if (t>0 && t < lightDist) { inShadow=true; break; }
-                    }
-                }
-                else if (obj.type == 1) // Trianglo
-                {
-                    float3 O = hitPoint + hitNormal*0.001;
-                    float3 D = L;
-
-                    float3 e1 = obj.v1 - obj.v0;
-                    float3 e2 = obj.v2 - obj.v0;
-                    float3 pvec = cross(D, e2);
-                    float det = dot(e1, pvec);
-                    if (abs(det) < 1e-6) continue;
-                    float invDet = 1.0/det;
-                    float3 tvec = O - obj.v0;
-                    float su = dot(tvec, pvec)*invDet;
-                    if (su < 0 || su > 1) continue;
-                    float3 qvec = cross(tvec, e1);
-                    float sv = dot(D, qvec)*invDet;
-                    if (sv < 0 || su+sv >1) continue;
-                    float t = dot(e2, qvec)*invDet;
-                    if (t>0 && t < lightDist) { inShadow=true; break; }
-                }
-                else if (obj.type == 2) // Cubo
-                {
-                    float3 O = hitPoint + hitNormal * 0.001;   // origem do raio de sombra (world)
-                    float3 D = L;                              // direção do raio de sombra (world)
-
-                    // Transformar para espaço local do box
-                    float3 localO = mul(obj.invMatWorld, float4(O,1)).xyz;
-                    float3 localD = normalize(mul(obj.invMatWorld, float4(D,0)).xyz);
-
-                    float tnear = -1e20;
-                    float tfar  =  1e20;
-
-                    for(int axis = 0; axis < 3; axis++)
-                    {
-                        float o = localO[axis];
-                        float d = localD[axis];
-                        float minB = obj.min[axis];
-                        float maxB = obj.max[axis];
-
-                        if (abs(d) < 1e-6)
-                        {
-                            if (o < minB || o > maxB)
-                            {
-                                tnear = 1e20;
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            float t1 = (minB - o) / d;
-                            float t2 = (maxB - o) / d;
-                            if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
-
-                            tnear = max(tnear, t1);
-                            tfar  = min(tfar, t2);
-
-                            if (tnear > tfar || tfar < 0) { tnear = 1e20; break; }
-                        }
-                    }
-
-                    if (tnear < 1e20)
-                    {
-                        float tLocal = (tnear > 0) ? tnear : tfar;
-                        if (tLocal <= 0) continue;
-
-                        // Converter interseção local para mundo
-                        float3 localHit = localO + tLocal * localD;
-                        float3 worldHit = mul(obj.matWorld, float4(localHit,1)).xyz;
-
-                        // Distancia real no espaço mundo
-                        float tWorld = length(worldHit - O);
-
-                        if (tWorld > 1e-4 && tWorld < lightDist)
-                        {
-                            inShadow = true;
-                            break;
-                        }
-                    }
-                }
-
-            }
-
-            if (!inShadow)
-            {
-                float NdotL = max(0,dot(hitNormal,L));
-                finalColor += mat.color * mat.diffuse * NdotL * light.color;
+                localColor += light.color *
+                              hit.material.color *
+                              hit.material.diffuse *
+                              NdotL;
             }
         }
 
-        finalColor /= lights.Length;
+        if ((int)lights.Length > 0)
+            localColor /= (int)lights.Length;
+
+        radiance += throughput * localColor;
+
+        float cosThetaV = -dot(rayDir, hit.normal);
+
+        float3 newDir;
+        float3 newOrigin;
+        bool validBounce = false;
+
+        if (hit.material.specular > 0.0f)
+        {
+            newDir = normalize(rayDir + 2.0f * cosThetaV * hit.normal);
+            newOrigin = hit.pointTransform + EPSILON * hit.normal;
+            throughput *= hit.material.specular * hit.material.color;
+            validBounce = true;
+        }
+        
+        if (hit.material.refraction > 0.0f)
+        {
+            float3 n = hit.normal;
+            float eta;
+
+            if (cosThetaV > 0.0f)
+            {
+                eta = 1.0f / hit.material.refractionIndex;
+            } 
+            else
+            {
+                eta = hit.material.refractionIndex;
+                n = -n;
+                cosThetaV = -cosThetaV;
+            }
+                
+
+            float k = 1.0f - eta * eta * (1.0f - cosThetaV * cosThetaV);
+            if (k >= 0.0f)
+            {
+                float cosThetaR = sqrt(k);
+                newDir = eta * rayDir + (eta * cosThetaV - cosThetaR) * n;
+                newDir = normalize(newDir);
+
+                newOrigin = hit.pointTransform - n * EPSILON;
+
+                throughput *= hit.material.refraction * hit.material.color;
+                validBounce = true;
+            }
+        }
+
+        if (!validBounce)
+            break;
+
+        rayOrigin = newOrigin;
+        rayDir = newDir;
     }
 
-    Result[id.xy] = float4(finalColor,1);
+    return saturate(radiance);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)width || id.y >= (uint)height)
+        return;
+
+    float u = (id.x + 0.5f) / width * 2.0f - 1.0f;
+    float v = (id.y + 0.5f) / height * 2.0f - 1.0f;
+
+    float aspect = (float)width / (float)height;
+    float3 rayDir = normalize(
+        camForward + 
+        u * aspect * camRight * tan(fov * 0.5f) + 
+        v * camUp * tan(fov * 0.5f)
+    );
+    float3 rayOrigin = camPos;
+
+    float3 color = TraceRay(rayOrigin, rayDir);
+
+    color = clamp(color, float3(0, 0, 0), float3(1, 1, 1));
+
+    Result[id.xy] = float4(color, 1.0f);
 }
