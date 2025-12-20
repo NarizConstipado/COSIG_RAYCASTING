@@ -4,51 +4,109 @@ using System.Collections.Generic;
 public class DebugBVHViewer : MonoBehaviour
 {
     public BVHBuilder bvh;
-    public Color colorSphere = Color.red;
-    public Color colorTriangle = Color.green;
-    public Color colorBox = Color.blue;
-    public float lineWidth = 0.02f;
 
-    void OnDrawGizmos()
+    [Header("Visual Settings")]
+    public float lineWidth = 0.2f;
+
+    public Color sphereColor = Color.red;
+    public Color triangleColor = Color.green;
+    public Color boxColor = Color.blue;
+    public Color nodeColor = Color.yellow;
+
+    private List<GameObject> lines = new List<GameObject>();
+
+    public void Build()
     {
-        if (bvh == null || bvh.prims == null) return;
+        if (bvh == null) return;
 
-        for (int i = 0; i < bvh.prims.Count; i++)
+        DrawBVHNodes();
+        DrawPrimitives();
+    }
+    void OnDestroy()
+    {
+        ClearLines();
+    }
+
+    void ClearLines()
+    {
+        foreach (var l in lines)
+            if (l) Destroy(l);
+        lines.Clear();
+    }
+
+    void DrawBVHNodes()
+    {
+        foreach (var node in bvh.nodes)
         {
-            var p = bvh.prims[i];
-
-            if (p.primType == 0) Gizmos.color = colorSphere;
-            else if (p.primType == 1) Gizmos.color = colorTriangle;
-            else if (p.primType == 2) Gizmos.color = colorBox;
-
-            DrawAABB(p.min, p.max);
+            DrawAABB(node.boundsMin, node.boundsMax, nodeColor);
         }
     }
 
-    void DrawAABB(Vector3 min, Vector3 max)
+    void DrawPrimitives()
     {
-        Vector3 p000 = new Vector3(min.x, min.y, min.z);
-        Vector3 p001 = new Vector3(min.x, min.y, max.z);
-        Vector3 p010 = new Vector3(min.x, max.y, min.z);
-        Vector3 p011 = new Vector3(min.x, max.y, max.z);
-        Vector3 p100 = new Vector3(max.x, min.y, min.z);
-        Vector3 p101 = new Vector3(max.x, min.y, max.z);
-        Vector3 p110 = new Vector3(max.x, max.y, min.z);
-        Vector3 p111 = new Vector3(max.x, max.y, max.z);
+        foreach (var p in bvh.prims)
+        {
+            Color c = p.primType switch
+            {
+                0 => sphereColor,
+                1 => triangleColor,
+                2 => boxColor,
+                _ => Color.white
+            };
 
-        Gizmos.DrawLine(p000, p001);
-        Gizmos.DrawLine(p001, p011);
-        Gizmos.DrawLine(p011, p010);
-        Gizmos.DrawLine(p010, p000);
+            DrawAABB(p.min, p.max, c);
+        }
+    }
 
-        Gizmos.DrawLine(p100, p101);
-        Gizmos.DrawLine(p101, p111);
-        Gizmos.DrawLine(p111, p110);
-        Gizmos.DrawLine(p110, p100);
+    void DrawAABB(Vector3 min, Vector3 max, Color color)
+    {
+        Vector3 p000 = new(min.x, min.y, min.z);
+        Vector3 p001 = new(min.x, min.y, max.z);
+        Vector3 p010 = new(min.x, max.y, min.z);
+        Vector3 p011 = new(min.x, max.y, max.z);
+        Vector3 p100 = new(max.x, min.y, min.z);
+        Vector3 p101 = new(max.x, min.y, max.z);
+        Vector3 p110 = new(max.x, max.y, min.z);
+        Vector3 p111 = new(max.x, max.y, max.z);
 
-        Gizmos.DrawLine(p000, p100);
-        Gizmos.DrawLine(p001, p101);
-        Gizmos.DrawLine(p010, p110);
-        Gizmos.DrawLine(p011, p111);
+        // base
+        DrawLine(p000, p001, color);
+        DrawLine(p001, p101, color);
+        DrawLine(p101, p100, color);
+        DrawLine(p100, p000, color);
+
+        // topo
+        DrawLine(p010, p011, color);
+        DrawLine(p011, p111, color);
+        DrawLine(p111, p110, color);
+        DrawLine(p110, p010, color);
+
+        // verticais
+        DrawLine(p000, p010, color);
+        DrawLine(p001, p011, color);
+        DrawLine(p100, p110, color);
+        DrawLine(p101, p111, color);
+    }
+
+    void DrawLine(Vector3 a, Vector3 b, Color color)
+    {
+        GameObject go = new GameObject("BVH_Line");
+        go.transform.parent = transform;
+
+        LineRenderer lr = go.AddComponent<LineRenderer>();
+        lr.positionCount = 2;
+        lr.SetPosition(0, a);
+        lr.SetPosition(1, b);
+
+        lr.startWidth = lineWidth;
+        lr.endWidth = lineWidth;
+
+        lr.material = new Material(Shader.Find("Sprites/Default"));
+        lr.startColor = color;
+        lr.endColor = color;
+
+        lr.useWorldSpace = true;
+
+        lines.Add(go);
     }
 }

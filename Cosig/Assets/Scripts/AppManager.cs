@@ -2,8 +2,6 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.IO;
-using Unity.VisualScripting;
-
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -24,8 +22,6 @@ public class AppManager : MonoBehaviour
     [SerializeField] private Slider rSlider;
     [SerializeField] private Slider gSlider;
     [SerializeField] private Slider bSlider;
-    [Header("")]
-    [SerializeField] private TMP_InputField recursionInput;
 
     [Header("UI - Lighting Controls")]
     [SerializeField] private Toggle ambientToggle;
@@ -46,12 +42,14 @@ public class AppManager : MonoBehaviour
     [SerializeField] private Slider zRotSlider;
 
     [Header("Other Settings")]
+    [SerializeField] private TMP_InputField recursionInput;
     [SerializeField] private GameObject progressSlider;
     [SerializeField] private TMP_Text elapsedTime;
     [SerializeField] private TMP_Text progress;
-
     [SerializeField] private RawImage loadImage;
-    
+    [SerializeField] private Toggle bvhToggle;
+    [SerializeField] private GameObject visibleBVH;
+
     void Awake()
     {
         sceneBuilder = GetComponent<SceneBuilder>();
@@ -79,6 +77,7 @@ public class AppManager : MonoBehaviour
         #else
             Debug.LogWarning("File browser only works in Editor.");
         #endif
+        CallRenderer();
     }
     public void OnLoadImage()
     {
@@ -106,8 +105,7 @@ public class AppManager : MonoBehaviour
             Debug.LogWarning("File browser only works in Editor.");
         #endif
     }
-    public void OnStartRender() { sceneBuilder.RenderGPU(); elapsedTime.text = $"Elapsed time: {sceneBuilder.GetElapsedTime()} ms";
-    }
+    public void OnStartRender() { CallRenderer(); }
     public void OnRecursionChanged() { if (int.TryParse(recursionInput.text, out int rec)) sceneBuilder.SetRecursionDepth(rec); }
 
     //Image Settings
@@ -211,6 +209,7 @@ public class AppManager : MonoBehaviour
         zRotation.text = zRotSlider.value.ToString();
         sceneBuilder.SetCameraRotationZ(zRotSlider.value);
     }
+    public void OnBVHToggle() { visibleBVH.SetActive(bvhToggle.isOn); }
 
     public void OnSaveImage()
     {
@@ -227,6 +226,12 @@ public class AppManager : MonoBehaviour
         Application.Quit();
     }
 
+
+    void CallRenderer()
+    {
+        sceneBuilder.RenderGPU();
+        elapsedTime.text = $"Elapsed time: {sceneBuilder.GetElapsedTime()} ms";
+    }
     void PopulateUIFromScene()
     {
         recursionInput.text = sceneBuilder.GetRecursionDepth().ToString();

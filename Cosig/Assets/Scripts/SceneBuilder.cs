@@ -1,17 +1,16 @@
 using Models;
 using Services;
-using System;
 using System.Collections.Generic;
 using System.IO;
-using UnityEditor.Rendering;
+using UnityEditor.U2D.Aseprite;
 using UnityEngine;
 using UnityEngine.UI;
-using static UnityEngine.GraphicsBuffer;
 
 [RequireComponent(typeof(GPUPrimaryRays))]
 public class SceneBuilder : MonoBehaviour
 {
     [SerializeField] private Material baseMaterial;
+    [SerializeField] private DebugBVHViewer viewBVH;
 
     private readonly SceneService sceneService = new();
 
@@ -41,6 +40,8 @@ public class SceneBuilder : MonoBehaviour
 
     private bool hasAmbient = true, hasDiffuse = true, hasSpecular = true, hasRefraction = true;
 
+    [SerializeField] private RawImage liveCameraView;
+    private RenderTexture liveCameraRT;
     void Start()
     {
         gpuRayTracer = GetComponent<GPUPrimaryRays>();
@@ -51,7 +52,9 @@ public class SceneBuilder : MonoBehaviour
         foreach (var objData in sceneObjects)
         {
             GameObject obj = null;
-            if (objData is SphereData) obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            if (objData is ImageSettings imgData)
+                imgSettings = imgData;
+            else if (objData is SphereData) obj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
 
             else if (objData is BoxData) obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
 
@@ -97,21 +100,20 @@ public class SceneBuilder : MonoBehaviour
                 cameraGO = camObj.AddComponent<Camera>();
                 cameraGO.fieldOfView = camData.fov;
 
+                cameraGO.clearFlags = CameraClearFlags.SolidColor;
+                ApplySettingsToSceneCamera();
+
                 cameraData = camData;
 
                 // aplicar transformação base
                 var t = transformations[camData.transformationIndex];
                 ApplyTransformation(camObj, t);
-
                 // aplicar distance como offset LOCAL
                 camObj.transform.Translate(Vector3.back * camData.distance, Space.Self);
 
+                
                 obj = camObj;
             }
-
-
-            else if (objData is ImageSettings imgData)
-                imgSettings = imgData;
 
             int tIndex = objData switch
             {
@@ -311,6 +313,10 @@ public class SceneBuilder : MonoBehaviour
             gpuRayTracer.primMax = outPrimMax;
         }
 
+        // Debugger para visualizar a BVH na cena
+        viewBVH.bvh = bvh;
+        viewBVH.Build();
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
         gpuRayTracer.Render(imgSettings, rec);
         sw.Stop();
@@ -333,7 +339,7 @@ public class SceneBuilder : MonoBehaviour
             outputImage.texture = output;
     }
 
-public void SaveSceneToJson(string path)
+    public void SaveSceneToJson(string path)
     {
         SceneData data = new()
         {
@@ -492,21 +498,17 @@ public void SaveSceneToJson(string path)
     public void SetRecursionDepth(int depth) { rec = depth; }
 
     // Image methods
-    public void SetImageWidth(int w) { imgSettings.size.x = Mathf.Max(8, w); }
-    public void SetImageHeight(int h)
-    {
-        imgSettings.size.y = Mathf.Max(8, h);
-    }
+    public void SetImageWidth(int w) { imgSettings.size.x = Mathf.Max(8, w); ApplySettingsToSceneCamera(); }
+    public void SetImageHeight(int h) { imgSettings.size.y = Mathf.Max(8, h); ApplySettingsToSceneCamera(); }
 
-    public void SetBackgroundColorR(int r) { imgSettings.backgroundColor.r = Mathf.Clamp01(r / 255f); }
-    public void SetBackgroundColorG(int g) { imgSettings.backgroundColor.g = Mathf.Clamp01(g / 255f); }
-    public void SetBackgroundColorB(int b) { imgSettings.backgroundColor.b = Mathf.Clamp01(b / 255f); }
+    public void SetBackgroundColorR(int r) { imgSettings.backgroundColor.r = Mathf.Clamp01(r / 255f); ApplySettingsToSceneCamera(); }
+    public void SetBackgroundColorG(int g) { imgSettings.backgroundColor.g = Mathf.Clamp01(g / 255f); ApplySettingsToSceneCamera(); }
+    public void SetBackgroundColorB(int b) { imgSettings.backgroundColor.b = Mathf.Clamp01(b / 255f); ApplySettingsToSceneCamera(); }
 
     // Light methods
     public void SetAmbient(bool value) 
     { 
         foreach (MaterialProperties mat in materials)
-        {
             foreach (var obj in sceneObjects)
             {
                 int mIndex = obj switch
@@ -524,13 +526,11 @@ public void SaveSceneToJson(string path)
                         ApplyMaterial(instantiatedObjects[mIndex], new MaterialProperties(mat.color.r, mat.color.g, mat.color.b, 0f, mat.diffuse, mat.specular, mat.refraction, mat.refractionIndex));
                 }
             }
-        }
         hasAmbient = value;
     }
     public void SetDiffuse(bool value)
     {
         foreach (MaterialProperties mat in materials)
-        {
             foreach (var obj in sceneObjects)
             {
                 int mIndex = obj switch
@@ -548,13 +548,11 @@ public void SaveSceneToJson(string path)
                         ApplyMaterial(instantiatedObjects[mIndex], new MaterialProperties(mat.color.r, mat.color.g, mat.color.b, mat.ambient, 0f, mat.specular, mat.refraction, mat.refractionIndex));
                 }
             }
-        }
         hasDiffuse = value;
     }
     public void SetSpecular(bool value)
     {
         foreach (MaterialProperties mat in materials)
-        {
             foreach (var obj in sceneObjects)
             {
                 int mIndex = obj switch
@@ -572,13 +570,11 @@ public void SaveSceneToJson(string path)
                         ApplyMaterial(instantiatedObjects[mIndex], new MaterialProperties(mat.color.r, mat.color.g, mat.color.b, mat.ambient, mat.diffuse, 0f, mat.refraction, mat.refractionIndex));
                 }
             }
-        }
         hasSpecular = value;
     }
     public void SetRefraction(bool value)
     {
         foreach (MaterialProperties mat in materials)
-        {
             foreach (var obj in sceneObjects)
             {
                 int mIndex = obj switch
@@ -596,7 +592,6 @@ public void SaveSceneToJson(string path)
                         ApplyMaterial(instantiatedObjects[mIndex], new MaterialProperties(mat.color.r, mat.color.g, mat.color.b, mat.ambient, mat.diffuse, mat.specular, 0f, mat.refractionIndex));
                 }
             }
-        }
         hasRefraction = value;
     }
 
@@ -621,5 +616,23 @@ public void SaveSceneToJson(string path)
 
         cameraGO.transform.position = basePos + distanceOffset;
         cameraGO.transform.rotation = Quaternion.Euler(t.rotation);
+    }
+
+    private void ApplySettingsToSceneCamera()
+    {
+        liveCameraRT = new RenderTexture(imgSettings.size.x, imgSettings.size.y, 24, RenderTextureFormat.ARGB32);
+        liveCameraRT.Create();
+
+        cameraGO.backgroundColor = new Color(
+            imgSettings.backgroundColor.r,
+            imgSettings.backgroundColor.g,
+            imgSettings.backgroundColor.b,
+            1f
+        );
+
+        cameraGO.targetTexture = liveCameraRT;
+
+        if (liveCameraView != null)
+            liveCameraView.texture = liveCameraRT;
     }
 }
