@@ -368,6 +368,9 @@ public class SceneBuilder : MonoBehaviour
             renderProgress = progress;
         };
 
+        viewBVH.bvh = bvh;
+        viewBVH.Build();
+
         StartCoroutine(RenderCPURoutine());
     }
 

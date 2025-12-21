@@ -19,6 +19,9 @@ public class DebugBVHViewer : MonoBehaviour
     {
         if (bvh == null) return;
 
+        if (lines.Count > 0)
+            ClearLines();
+
         DrawBVHNodes();
         DrawPrimitives();
     }
