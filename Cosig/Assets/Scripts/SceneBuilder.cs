@@ -1,10 +1,12 @@
 using Models;
 using Services;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor.U2D.Aseprite;
 using UnityEngine;
 using UnityEngine.UI;
+using static UnityEditor.Rendering.CameraUI;
 
 [RequireComponent(typeof(GPUPrimaryRays))]
 public class SceneBuilder : MonoBehaviour
@@ -42,6 +44,10 @@ public class SceneBuilder : MonoBehaviour
 
     [SerializeField] private RawImage liveCameraView;
     private RenderTexture liveCameraRT;
+
+    private float renderProgress = 0f;
+    private bool isRendering = false;
+
     void Start()
     {
         gpuRayTracer = GetComponent<GPUPrimaryRays>();
@@ -161,7 +167,7 @@ public class SceneBuilder : MonoBehaviour
         obj.transform.localScale = transformation.scale;
     }
 
-    void ApplyMaterial(GameObject obj, MaterialProperties properties)
+    public void ApplyMaterial(GameObject obj, MaterialProperties properties)
     {
         Material newMaterial = new(baseMaterial)
         {
@@ -255,6 +261,15 @@ public class SceneBuilder : MonoBehaviour
         return gpuMaterials;
     }
 
+    private List<MaterialProperties> ConvertMaterialsToCPU()
+    {
+        List<MaterialProperties> cpuMaterials = new();
+        for (int i = 0; i < materials.Count; i++)
+            cpuMaterials.Add(new MaterialProperties(materials[i].color.r, materials[i].color.g, materials[i].color.b, hasAmbient ? materials[i].ambient : 0f, hasDiffuse ? materials[i].diffuse : 0f, hasSpecular ? materials[i].specular : 0f, hasRefraction ? materials[i].refraction : 0f, materials[i].refractionIndex));
+
+        return cpuMaterials;
+    }
+
     private GPULight[] ConvertLightsToGPU()
     {
         GPULight[] gpuLights = new GPULight[lights.Count];
@@ -274,9 +289,20 @@ public class SceneBuilder : MonoBehaviour
 
     public void RenderGPU()
     {
+        if (isRendering)
+            return;
+
+        isRendering = true;
+        renderProgress = 0f;
+
         GPUObject[] gpuObjects = ConvertObjectsToGPU();
+        renderProgress = 0.15f;
+
         GPUMaterial[] gpuMaterials = ConvertMaterialsToGPU();
+        renderProgress = 0.20f;
+        
         GPULight[] gpuLights = ConvertLightsToGPU();
+        renderProgress = 0.25f;
 
         if (gpuRayTracer == null)
         {
@@ -290,9 +316,11 @@ public class SceneBuilder : MonoBehaviour
 
         BVHBuilder bvh = new();
         bvh.GatherPrimitives(sceneObjects, transformations);
+        renderProgress = 0.35f;
         bvh.BuildRecursive();
+        renderProgress = 0.55f;
 
-        this.bvhBuilder = bvh;
+        bvhBuilder = bvh;
 
         if (bvhBuilder != null)
         {
@@ -300,6 +328,8 @@ public class SceneBuilder : MonoBehaviour
                 out Vector3[] nodeMins, out Vector3[] nodeMaxs, out int[] nodeLeft, out int[] nodeRight, out int[] nodeFirstPrim, out int[] nodePrimCount,
                 out Vector3[] outPrimMin, out Vector3[] outPrimMax, out int[] outPrimType, out int[] outPrimObjIndex,
                 out Vector3[] outTriV0, out Vector3[] outTriV1, out Vector3[] outTriV2, out Vector4[] outSphereCenterRadius);
+
+            renderProgress = 0.75f;
 
             gpuRayTracer.bvhNodeMins = nodeMins;
             gpuRayTracer.bvhNodeMaxs = nodeMaxs;
@@ -317,26 +347,28 @@ public class SceneBuilder : MonoBehaviour
         viewBVH.bvh = bvh;
         viewBVH.Build();
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        gpuRayTracer.Render(imgSettings, rec);
-        sw.Stop();
-        Debug.Log("Compute time with: " + sw.ElapsedMilliseconds + " ms");
-        elapsedTimeMS = sw.ElapsedMilliseconds;
-
-        if (outputImage != null)
-            outputImage.texture = gpuRayTracer.outputTexture;
+        StartCoroutine(GPURenderRoutine());
     }
 
     public void RenderCPU()
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        cpuRayTracer = new PrimaryRays(sceneObjects, lights, transformations, materials, imgSettings, cameraData);
-        Texture2D output = cpuRayTracer.Render();
-        sw.Stop();
-        Debug.Log("Compute time with: " + sw.ElapsedMilliseconds + " ms");
-        elapsedTimeMS = sw.ElapsedMilliseconds;
-        if (outputImage != null)
-            outputImage.texture = output;
+        if (isRendering)
+            return;
+
+        isRendering = true;
+        renderProgress = 0f;
+
+        BVHBuilder bvh = new();
+        bvh.GatherPrimitives(sceneObjects, transformations);
+        bvh.BuildRecursive();
+
+        cpuRayTracer = new PrimaryRays(sceneObjects, lights, transformations, ConvertMaterialsToCPU(), imgSettings, cameraData, bvh);
+        cpuRayTracer.OnProgress += (progress) =>
+        {
+            renderProgress = progress;
+        };
+
+        StartCoroutine(RenderCPURoutine());
     }
 
     public void SaveSceneToJson(string path)
@@ -463,11 +495,14 @@ public class SceneBuilder : MonoBehaviour
     }
 
     // UI methods
-    public void SaveCurrentImage(string path) { gpuRayTracer.SaveRenderTextureToPNG(path); }
+    public void SaveCurrentImage(string path, bool isGPU) { if (isGPU) gpuRayTracer.SaveRenderTextureToPNG(path); else cpuRayTracer.SaveRenderTextureToPNG(path); }
 
     // Getters
     public float GetElapsedTime() { return elapsedTimeMS; }
     public int GetRecursionDepth() { return rec; }
+    public float GetRenderProgress() { return isRendering ? renderProgress : 0f; }
+    public bool IsRendering() { return isRendering; }
+
 
     // Image methods
     public int GetImageSettingsW() { return imgSettings.size.x; }
@@ -617,7 +652,6 @@ public class SceneBuilder : MonoBehaviour
         cameraGO.transform.position = basePos + distanceOffset;
         cameraGO.transform.rotation = Quaternion.Euler(t.rotation);
     }
-
     private void ApplySettingsToSceneCamera()
     {
         liveCameraRT = new RenderTexture(imgSettings.size.x, imgSettings.size.y, 24, RenderTextureFormat.ARGB32);
@@ -634,5 +668,46 @@ public class SceneBuilder : MonoBehaviour
 
         if (liveCameraView != null)
             liveCameraView.texture = liveCameraRT;
+    }
+    private IEnumerator GPURenderRoutine()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        float startTime = Time.realtimeSinceStartup;
+        float estimatedGPUTime = 0.1f;
+
+        gpuRayTracer.Render(imgSettings, rec);
+        
+        while (!gpuRayTracer.isFinished)
+        {
+            float gpuElapsed = Time.realtimeSinceStartup - startTime;
+            float t = Mathf.Clamp01(gpuElapsed / estimatedGPUTime);
+            renderProgress = Mathf.Lerp(0.75f, 0.95f, t);
+            yield return null;
+        }
+        sw.Stop();
+        elapsedTimeMS = sw.ElapsedMilliseconds;
+        renderProgress = 1f;
+        isRendering = false;
+        outputImage.texture = gpuRayTracer.outputTexture;
+    }
+    private IEnumerator RenderCPURoutine()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        Texture2D result = null;
+
+        yield return cpuRayTracer.Render(tex =>
+        {
+            result = tex;
+        });
+
+        sw.Stop();
+        elapsedTimeMS = sw.ElapsedMilliseconds;
+
+        renderProgress = 1f;
+        isRendering = false;
+
+        if (outputImage != null && result != null)
+            outputImage.texture = result;
     }
 }

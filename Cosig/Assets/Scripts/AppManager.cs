@@ -43,12 +43,14 @@ public class AppManager : MonoBehaviour
 
     [Header("Other Settings")]
     [SerializeField] private TMP_InputField recursionInput;
-    [SerializeField] private GameObject progressSlider;
-    [SerializeField] private TMP_Text elapsedTime;
+    [SerializeField] private Slider progressSlider;
     [SerializeField] private TMP_Text progress;
+    [SerializeField] private TMP_Text elapsedTime;
     [SerializeField] private RawImage loadImage;
     [SerializeField] private Toggle bvhToggle;
     [SerializeField] private GameObject visibleBVH;
+    [SerializeField] private Toggle gpuToggle;
+    [SerializeField] private Toggle cpuToggle;
 
     void Awake()
     {
@@ -58,6 +60,21 @@ public class AppManager : MonoBehaviour
     void Start()
     {
         sceneBuilder.OnSceneLoaded += PopulateUIFromScene;
+        visibleBVH.SetActive(false);
+    }
+    void Update()
+    {
+        if (!sceneBuilder.IsRendering())
+        {
+            progressSlider.value = 0f;
+            progress.text = "Progress: ";
+            return;
+        }
+
+        float p = sceneBuilder.GetRenderProgress();
+
+        progressSlider.value = p;
+        progress.text = $"Progress: {Mathf.RoundToInt(p * 100f)} %";
     }
     public void OnLoadScene()
     {
@@ -210,11 +227,41 @@ public class AppManager : MonoBehaviour
         sceneBuilder.SetCameraRotationZ(zRotSlider.value);
     }
     public void OnBVHToggle() { visibleBVH.SetActive(bvhToggle.isOn); }
+    public void OnGPUToggle()
+    {
+        if (gpuToggle.isOn)
+        {
+            cpuToggle.isOn = false;
+        }
+        else
+        {
+            cpuToggle.isOn = true;
+        }
+    }
+    public void OnCPUToggle()
+    {
+        if (cpuToggle.isOn)
+        {
+            gpuToggle.isOn = false;
+        }
+        else
+        {
+            gpuToggle.isOn = true;
+        }
+    }
 
     public void OnSaveImage()
     {
-        string path = Application.dataPath + "/RenderedImage.png";
-        sceneBuilder.SaveCurrentImage(path);
+        if (gpuToggle.isOn)
+        {
+            string path = Application.dataPath + "/GPURenderedImage.png";
+            sceneBuilder.SaveCurrentImage(path, gpuToggle.isOn);
+        }
+        else
+        {
+            string path = Application.dataPath + "/CPURenderedImage.png";
+            sceneBuilder.SaveCurrentImage(path, gpuToggle.isOn);
+        }
     }
     public void OnSaveScene()
     {
@@ -226,10 +273,12 @@ public class AppManager : MonoBehaviour
         Application.Quit();
     }
 
-
     void CallRenderer()
     {
-        sceneBuilder.RenderGPU();
+        if (gpuToggle.isOn)
+            sceneBuilder.RenderGPU();
+        else
+            sceneBuilder.RenderCPU();
         elapsedTime.text = $"Elapsed time: {sceneBuilder.GetElapsedTime()} ms";
     }
     void PopulateUIFromScene()

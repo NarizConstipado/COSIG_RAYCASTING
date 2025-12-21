@@ -1,5 +1,7 @@
 using Models;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor.TerrainTools;
 using UnityEngine;
 
@@ -12,11 +14,15 @@ public class PrimaryRays
     private List<MaterialProperties> materials;
     private ImageSettings imageSettings;
     private CameraData camera;
+    private BVHBuilder bvhBuilder;
 
     private const float epsilon = 1e-4f;
-    
 
-    public PrimaryRays(List<ObjectData> objs, List<LightData> lgts, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam)
+    public System.Action<float> OnProgress;
+
+    private Texture2D outputTexture;
+
+    public PrimaryRays(List<ObjectData> objs, List<LightData> lgts, List<Transformation> trans, List<MaterialProperties> mats, ImageSettings img, CameraData cam, BVHBuilder bvh)
     {
         objects = objs;
         lights = lgts;
@@ -24,22 +30,31 @@ public class PrimaryRays
         materials = mats;
         imageSettings = img;
         camera = cam;
+        bvhBuilder = bvh;
     }
 
-    public Texture2D Render()
+    public IEnumerator Render(System.Action<Texture2D> onFinished)
     {
         int rec = 2; 
 
         int Hres = imageSettings.size.x;
         int Vres = imageSettings.size.y;
 
+        int totalPixels = Hres * Vres;
+        int processed = 0;
+
         Texture2D tex = new Texture2D(Hres, Vres);
         tex.filterMode = FilterMode.Point;
 
-        Vector3 origin = transformations[camera.transformationIndex].translation;
-        origin.z += camera.distance;
+        Vector3 camPos = transformations[camera.transformationIndex].translation;
+        camPos.z += camera.distance;
+        Quaternion camRot = Quaternion.Euler(transformations[camera.transformationIndex].rotation);
 
-        float fovRad = camera.fov * Mathf.PI / 180f;
+        Vector3 forward = camRot * Vector3.forward;
+        Vector3 right = camRot * Vector3.right;
+        Vector3 up = camRot * Vector3.up;
+
+        float fovRad = camera.fov * Mathf.Deg2Rad;
 
         float height = 2f * camera.distance * Mathf.Tan(fovRad / 2f);
         float width = height * Hres / (float)Vres;
@@ -47,7 +62,6 @@ public class PrimaryRays
         float s = height / Vres;
 
         for (int j = 0; j < Vres; j++)
-        {
             for (int i = 0; i < Hres; i++)
             {
                 // Centro do pixel no plano
@@ -55,11 +69,11 @@ public class PrimaryRays
                 float Py = -(j + 0.5f) * s + height / 2f;
                 float Pz = 0f;
 
-                Vector3 P = new Vector3(Px, Py, Pz);
+                Vector3 P = camPos + forward * camera.distance + right * Px + up * Py;
 
-                Vector3 direction = (P - origin).normalized;
+                Vector3 direction = (P - camPos).normalized;
 
-                Ray ray = new Ray(origin, direction);
+                Ray ray = new Ray(camPos, direction);
 
                 Color color = traceRay(ray, rec);
 
@@ -75,31 +89,74 @@ public class PrimaryRays
                     255
                 );
 
-                tex.SetPixel(Hres - 1 - i, Vres - 1 - j, pixelColor);
+                tex.SetPixel(i, Vres - 1 - j, pixelColor);
+
+                processed++;
+
+                if (processed % 500 == 0)
+                {
+                    OnProgress?.Invoke((float)processed / totalPixels);
+                    yield return null;
+                }
             }
-        }
 
         tex.Apply();
-        return tex;
+        outputTexture = tex;
+        OnProgress?.Invoke(1f);
+        onFinished?.Invoke(tex);
     }
 
     private Color traceRay(Ray ray, int rec)
     {
         Color finalColor = Color.black;
-        Hit hit = new Hit
-        {
-            found = false,
-            tmin = float.PositiveInfinity
-        };
+        Hit hit = new Hit { found = false, tmin = float.PositiveInfinity };
 
-        foreach (var obj in objects)
+        if (bvhBuilder != null && bvhBuilder.nodes.Count > 0)
         {
-            if (obj is SphereData sphere) IntersectSphere(sphere, ray, ref hit);
-            else if (obj is BoxData box) IntersectBox(box, ray, ref hit);
-            else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, ray, ref hit);
+            Stack<int> stack = new Stack<int>();
+            stack.Push(0);
+
+            while (stack.Count > 0)
+            {
+                int nodeIdx = stack.Pop();
+                var node = bvhBuilder.nodes[nodeIdx];
+
+                if (!IntersectAABB(ray, node.boundsMin, node.boundsMax))
+                    continue;
+
+                if (node.primCount > 0)
+                {
+                    for (int i = node.firstPrim; i < node.firstPrim + node.primCount; i++)
+                    {
+                        int primIdx = bvhBuilder.primIndices[i];
+                        var prim = bvhBuilder.prims[primIdx];
+
+                        switch (prim.primType)
+                        {
+                            case 0: IntersectSphere(objects[prim.objIndex] as SphereData, ray, ref hit); break;
+                            case 1: IntersectTriangle(objects[prim.objIndex] as TrianglePrimitive, ray, ref hit); break;
+                            case 2: IntersectBox(objects[prim.objIndex] as BoxData, ray, ref hit); break;
+                        }
+                    }
+                }
+                else
+                {
+                    if (node.left >= 0) stack.Push(node.left);
+                    if (node.right >= 0) stack.Push(node.right);
+                }
+            }
+        }
+        else
+        {
+            foreach (var obj in objects)
+            {
+                if (obj is SphereData sphere) IntersectSphere(sphere, ray, ref hit);
+                else if (obj is BoxData box) IntersectBox(box, ray, ref hit);
+                else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, ray, ref hit);
+            }
         }
 
-        if (!hit.found) return finalColor;
+        if (!hit.found) return new Color(imageSettings.backgroundColor.r, imageSettings.backgroundColor.g, imageSettings.backgroundColor.b);
 
         foreach (var light in lights)
         {
@@ -113,33 +170,64 @@ public class PrimaryRays
             L.Normalize();
 
             float cosTheta = Vector3.Dot(hit.normal, L);
-
             if (cosTheta > 0f)
             {
                 Vector3 shadowOrigin = hit.point + hit.normal * epsilon;
-
                 Ray shadowRay = new Ray(shadowOrigin, L);
+                Hit shadowHit = new Hit { found = false, tmin = tLight };
 
-                Hit shadowHit = new Hit
+                if (bvhBuilder != null && bvhBuilder.nodes.Count > 0)
                 {
-                    found = false,
-                    tmin = tLight
-                };
+                    Stack<int> shadowStack = new Stack<int>();
+                    shadowStack.Push(0);
+                    while (shadowStack.Count > 0)
+                    {
+                        int nodeIdx = shadowStack.Pop();
+                        var node = bvhBuilder.nodes[nodeIdx];
 
-                foreach (var obj in objects)
+                        if (!IntersectAABB(shadowRay, node.boundsMin, node.boundsMax))
+                            continue;
+
+                        if (node.primCount > 0)
+                        {
+                            for (int i = node.firstPrim; i < node.firstPrim + node.primCount; i++)
+                            {
+                                int primIdx = bvhBuilder.primIndices[i];
+                                var prim = bvhBuilder.prims[primIdx];
+
+                                switch (prim.primType)
+                                {
+                                    case 0: IntersectSphere(objects[prim.objIndex] as SphereData, shadowRay, ref shadowHit); break;
+                                    case 1: IntersectTriangle(objects[prim.objIndex] as TrianglePrimitive, shadowRay, ref shadowHit); break;
+                                    case 2: IntersectBox(objects[prim.objIndex] as BoxData, shadowRay, ref shadowHit); break;
+                                }
+
+                                if (shadowHit.found) break;
+                            }
+                        }
+                        else
+                        {
+                            if (node.left >= 0) shadowStack.Push(node.left);
+                            if (node.right >= 0) shadowStack.Push(node.right);
+                        }
+
+                        if (shadowHit.found) break;
+                    }
+                }
+                else
                 {
-                    if (obj is SphereData sphere) IntersectSphere(sphere, shadowRay, ref shadowHit);
-                    else if (obj is BoxData box) IntersectBox(box, shadowRay, ref shadowHit);
-                    else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, shadowRay, ref shadowHit);
+                    foreach (var obj in objects)
+                    {
+                        if (obj is SphereData sphere) IntersectSphere(sphere, shadowRay, ref shadowHit);
+                        else if (obj is BoxData box) IntersectBox(box, shadowRay, ref shadowHit);
+                        else if (obj is TrianglePrimitive tri) IntersectTriangle(tri, shadowRay, ref shadowHit);
 
-                    if (shadowHit.found)
-                        break;
+                        if (shadowHit.found) break;
+                    }
                 }
 
                 if (!shadowHit.found)
-                {
                     finalColor += light.color * hit.material.color * hit.material.diffuse * cosTheta;
-                }
             }
         }
 
@@ -147,51 +235,33 @@ public class PrimaryRays
         {
             float cosThetaV = -Vector3.Dot(ray.direction, hit.normal);
 
-            if (hit.material.specular > 0f)
+            if (hit.material.specular > 0f && cosThetaV > 0f)
             {
-                if (cosThetaV > 0f)
-                {
-                    Vector3 r = ray.direction + 2f * cosThetaV * hit.normal;
-                    r.Normalize();
-
-                    Ray reflectedRay = new Ray(hit.point + epsilon * r, r);
-
-                    finalColor += hit.material.color * hit.material.specular * traceRay(reflectedRay, rec - 1);
-                }
+                Vector3 r = ray.direction + 2f * cosThetaV * hit.normal;
+                r.Normalize();
+                Ray reflectedRay = new Ray(hit.point + epsilon * r, r);
+                finalColor += hit.material.color * hit.material.specular * traceRay(reflectedRay, rec - 1);
             }
 
-            if(hit.material.refraction > 0f)
+            if (hit.material.refraction > 0f)
             {
                 Vector3 N = hit.normal;
-                float eta;
-
-                if (cosThetaV > 0f)
-                {
-                    eta = 1.0f / hit.material.refractionIndex;
-                }
-                else
-                {
-                    eta = hit.material.refractionIndex;
-                    N = -N;
-                    cosThetaV = -cosThetaV;
-                }
+                float eta = (cosThetaV > 0f) ? 1.0f / hit.material.refractionIndex : hit.material.refractionIndex;
+                if (cosThetaV < 0f) { N = -N; cosThetaV = -cosThetaV; }
 
                 float k = 1.0f - eta * eta * (1.0f - cosThetaV * cosThetaV);
                 if (k >= 0f)
                 {
                     float cosThetaR = Mathf.Sqrt(k);
-
                     Vector3 refractDir = eta * ray.direction + (eta * cosThetaV - cosThetaR) * N;
                     refractDir.Normalize();
-
                     Ray refractedRay = new Ray(hit.point - N * epsilon, refractDir);
-
                     finalColor += hit.material.color * hit.material.refraction * traceRay(refractedRay, rec - 1);
                 }
             }
         }
 
-        return finalColor /= lights.Count;
+        return finalColor / Mathf.Max(1, lights.Count);
     }
 
     private void IntersectTriangle(TrianglePrimitive tri, Ray rayWorld, ref Hit hit)
@@ -371,5 +441,44 @@ public class PrimaryRays
             hit.normal = worldNormal;
             hit.material = materials[box.materialIndex];
         }
+    }
+    private bool IntersectAABB(Ray ray, Vector3 min, Vector3 max)
+    {
+        float tmin = float.NegativeInfinity;
+        float tmax = float.PositiveInfinity;
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (Mathf.Abs(ray.direction[i]) < epsilon)
+            {
+                if (ray.origin[i] < min[i] || ray.origin[i] > max[i])
+                    return false;
+            }
+            else
+            {
+                float t1 = (min[i] - ray.origin[i]) / ray.direction[i];
+                float t2 = (max[i] - ray.origin[i]) / ray.direction[i];
+                if (t1 > t2) { float tmp = t1; t1 = t2; t2 = tmp; }
+                tmin = Mathf.Max(tmin, t1);
+                tmax = Mathf.Min(tmax, t2);
+                if (tmin > tmax) return false;
+            }
+        }
+
+        return true;
+    }
+
+    public void SaveRenderTextureToPNG(string path)
+    {
+        if (outputTexture == null)
+        {
+            Debug.LogWarning("No texture to save!");
+            return;
+        }
+
+        byte[] bytes = outputTexture.EncodeToPNG();
+        File.WriteAllBytes(path, bytes);
+
+        Debug.Log("Saved CPU raytraced image to: " + path);
     }
 }

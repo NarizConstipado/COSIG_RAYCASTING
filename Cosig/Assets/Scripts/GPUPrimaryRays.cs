@@ -1,6 +1,7 @@
 ﻿using Models;
-using UnityEngine;
 using System.IO;
+using UnityEngine;
+using UnityEngine.Rendering;
 
 public class GPUPrimaryRays : MonoBehaviour
 {
@@ -30,8 +31,11 @@ public class GPUPrimaryRays : MonoBehaviour
     public Vector3[] primTriV2;
     public Vector4[] primSphereCenterRadius;
 
+    public bool isFinished = false;
+
     public void Render(ImageSettings imgSettings, int rec)
     {
+        isFinished = false;
         if (imgSettings != null)
         {
             this.width = Mathf.CeilToInt(imgSettings.size.x / 8f) * 8;
@@ -136,6 +140,8 @@ public class GPUPrimaryRays : MonoBehaviour
         var renderer = GetComponent<Renderer>();
         if (renderer != null)
             renderer.material.mainTexture = outputTexture;
+
+        AsyncGPUReadback.Request(outputTexture, 0, TextureFormat.RGBAFloat, OnComplete);
     }
 
     public void SaveRenderTextureToPNG(string path)
@@ -154,5 +160,17 @@ public class GPUPrimaryRays : MonoBehaviour
 
         RenderTexture.active = activeRT;
         Destroy(tex);
+    }
+
+    private void OnComplete(AsyncGPUReadbackRequest request)
+    {
+        if (request.hasError)
+        {
+            Debug.LogError("GPU readback error!");
+        }
+        else
+        {
+            isFinished = true;
+        }
     }
 }
